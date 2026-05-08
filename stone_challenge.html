@@ -560,29 +560,47 @@ function updateStone(dt) {
     stone.y  += stone.vy * dt;
 
     if (stone.y >= WATER_Y && stone.vy > 0 && stone.skipCdn <= 0) {
-      stone.y    = WATER_Y;
-      stone.vy  *= -(BOUNCE_DAMP * stone.bounceDampMod);
-      stone.vx  *= (VX_DAMP * stone.vxDampMod);
-      stone.skipN++;
-      stone.skipCdn = SKIP_CDN;
-      stone.flashT  = 0.15;
-      const str = Math.max(0.35, 1 - stone.skipN * 0.06);
-      drops.push(new Drop(stone.x, stone.y, t, str));
-      playSkip(str, stone.skipN - 1);
-      if (stone.skipN > bestSkips) bestSkips = stone.skipN;
-      updateScore();
-      if (Math.abs(stone.vx) < MIN_VX) {
+      stone.y = WATER_Y;
+      const effVxDamp = VX_DAMP * stone.vxDampMod;
+      const vxNext    = Math.abs(stone.vx) * effVxDamp;
+
+      // ±1 forgiveness — target+1 case:
+      // stone touches water at skip #target but is nearly spent → sink here
+      // instead of letting it bounce one extra time
+      if (!challengeWon && stone.skipN === target && vxNext < MIN_VX / effVxDamp) {
         stone.vx = stone.vy = 0;
         stone.state = 'sinking';
         const sinkDrop = new Drop(stone.x, stone.y, t, 0.9);
         drops.push(sinkDrop);
         playSink();
-        if (Math.abs(stone.skipN - target) <= 1 && !challengeWon) {
-          stone.skipN = target;
-          challengeWon = true;
-          totalWins++;
-          winDrop = sinkDrop;
-          playWin();
+        challengeWon = true; totalWins++; winDrop = sinkDrop; playWin();
+        updateScore();
+      } else {
+        // Normal bounce
+        stone.vy *= -(BOUNCE_DAMP * stone.bounceDampMod);
+        stone.vx  = vxNext;
+        stone.skipN++;
+        stone.skipCdn = SKIP_CDN;
+        stone.flashT  = 0.15;
+        const str = Math.max(0.35, 1 - stone.skipN * 0.06);
+        drops.push(new Drop(stone.x, stone.y, t, str));
+        playSkip(str, stone.skipN - 1);
+        if (stone.skipN > bestSkips) bestSkips = stone.skipN;
+        updateScore();
+
+        if (!challengeWon && vxNext < MIN_VX && stone.skipN === target - 1) {
+          // ±1 forgiveness — target-1 case:
+          // stone would sink one skip short → give exactly one more bounce
+          stone.vx = MIN_VX * 0.98 / effVxDamp;
+        } else if (vxNext < MIN_VX) {
+          stone.vx = stone.vy = 0;
+          stone.state = 'sinking';
+          const sinkDrop = new Drop(stone.x, stone.y, t, 0.9);
+          drops.push(sinkDrop);
+          playSink();
+          if (stone.skipN === target && !challengeWon) {
+            challengeWon = true; totalWins++; winDrop = sinkDrop; playWin();
+          }
         }
       }
     }
