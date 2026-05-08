@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>stone skip — test</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box }
+body { background:#000; overflow:hidden; user-select:none; touch-action:none }
+.layer {
+  font-family:'Courier New',Courier,monospace;
+  font-size:14px;
+  line-height:1.18;
+  white-space:pre;
+  position:fixed;
+  top:0; left:0;
+}
+#waves { color:#888; cursor:default }
+#band  { color:#cc1a1a; pointer-events:none; visibility:hidden }
+#stone-el {
+  position:fixed;
+  font-family:'Courier New',Courier,monospace;
+  font-size:14px;
+  line-height:1.18;
+  color:#d4c9a8;
+  pointer-events:none;
+}
+#hint {
+  position:fixed; bottom:10px; left:50%;
+  transform:translateX(-50%);
+  color:#333; font-family:monospace; font-size:11px;
+  pointer-events:none; transition:opacity 0.5s;
+}
+#score {
+  position:fixed; top:10px; right:16px;
+  color:#444; font-family:monospace; font-size:12px;
+  pointer-events:none;
+}
+
+/* ── Splash overlay ─────────────────────────────────────────────────── */
+#splash {
+  position:fixed; inset:0; z-index:200; background:#000;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+}
+#sp-stage, #sp-title {
+  font-family:'Courier New',Courier,monospace;
+  font-size:min(0.833vw,0.95vh);
+  line-height:1.15; white-space:pre; letter-spacing:0;
+  width:220ch; flex-shrink:0;
+}
+#sp-stage { color:#aaa; }
+#sp-stage .spln { display:block; opacity:0; transition:opacity .06s linear; }
+#sp-stage .spln.on { opacity:1; }
+#sp-title { color:#fff; margin-top:.45em; opacity:0; transition:opacity .9s ease; }
+#sp-title.on { opacity:1; }
+#sp-prompt {
+  font-family:'Courier New',monospace;
+  font-size:min(0.7vw,1.1vh); color:#333; letter-spacing:4px;
+  opacity:0; transition:opacity .8s; white-space:nowrap;
+  margin-top:.7em; flex-shrink:0;
+}
+#sp-prompt.on { opacity:1; }
+#sp-prompt span { animation:spblink 1.4s step-end infinite; }
+@keyframes spblink { 50%{opacity:0} }
+</style>
+</head>
+<body>
+<pre id="waves" class="layer"></pre>
+<pre id="band"  class="layer"></pre>
+<span id="stone-el"></span>
+<div id="hint">grab stone · pull back · release</div>
+<div id="score"></div>
+<script>
+
+// ── sim step: fixed like Python (t += 0.033 per frame) ────────────────
+const DT = 0.033;
+
+// ── Audio ─────────────────────────────────────────────────────────────
+let audio = null;
+
+function initAudio() {
+  if (audio) return;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // Routing: sources → dry out → destination
+  //          sources → reverbSend → convolver → wetOut → destination
+  const dry = ctx.createGain();
+  dry.gain.value = 0.5;
+  dry.connect(ctx.destination);
+
+  const reverbSend = ctx.createGain();
+  reverbSend.gain.value = 0.7;
+
+  // Synthetic impulse response (4 sec cave-like reverb)
+  const irLen = ctx.sampleRate * 4;
+  const ir = ctx.createBuffer(2, irLen, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    for (let i = 0; i < irLen; i++)
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 1.6);
+  }
+  const conv = ctx.createConvolver();
+  conv.buffer = ir;
+  const wetOut = ctx.createGain();
+  wetOut.gain.value = 0.55;
+  reverbSend.connect(conv);
+  conv.connect(wetOut);
+  wetOut.connect(ctx.destination);
+
+  // ── Sub drone (55 Hz root + harmonics, fade in) ──────────────────────
+  const droneOut = ctx.createGain();
+  droneOut.gain.value = 0;
+  droneOut.connect(dry);
+  droneOut.connect(reverbSend);
+  [[55, 0.10], [55.3, 0.07], [82.5, 0.06], [110, 0.035]].forEach(([f, v]) => {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = f; g.gain.value = v;
+    o.connect(g); g.connect(droneOut); o.start();
+  });
+  droneOut.gain.setTargetAtTime(0.55, ctx.currentTime + 0.2, 2.5);
+
+  // ── Shimmer layer (bandpass noise, reacts to wave count) ─────────────
+  const noiseLen = ctx.sampleRate * 4;
+  const noiseBuf = ctx.createBuffer(1, noiseLen, ctx.sampleRate);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < noiseLen; i++) nd[i] = Math.random() * 2 - 1;
+  const noiseSrc = ctx.createBufferSource();
+  noiseSrc.buffer = noiseBuf; noiseSrc.loop = true;
+
+  const shimFilter = ctx.createBiquadFilter();
+  shimFilter.type = 'bandpass';
+  shimFilter.frequency.value = 3000;
+  shimFilter.Q.value = 20;
+
+  const shimGain = ctx.createGain();
+  shimGain.gain.value = 0;
+
+  noiseSrc.connect(shimFilter);
+  shimFilter.connect(shimGain);
+  shimGain.connect(dry);
+  shimGain.connect(reverbSend);
+  noiseSrc.start();
+
+  // Very slow LFO drifts shimmer center frequency
+  const lfo = ctx.createOscillator();
+  const lfoGain = ctx.createGain();
+  lfo.frequency.value = 0.06; lfoGain.gain.value = 700;
+  lfo.connect(lfoGain); lfoGain.connect(shimFilter.frequency); lfo.start();
+
+  audio = { ctx, dry, reverbSend, shimGain, shimFilter };
+}
+
+// Pentatonic sequence — skip N maps to pitch (forms a melody per throw)
+const SKIP_PITCHES = [440, 554, 622, 740, 831, 880, 1047, 880, 740, 622];
+
+function playSkip(strength, skipN) {
+  if (!audio) return;
+  const { ctx, dry, reverbSend } = audio;
+  const now = ctx.currentTime;
+  const freq = SKIP_PITCHES[skipN % SKIP_PITCHES.length];
+
+  // Tonal ping (sine, sharp attack, slow tail)
+  const osc = ctx.createOscillator();
+  const env = ctx.createGain();
+  osc.type = 'sine'; osc.frequency.value = freq;
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(0.20 * strength, now + 0.003);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+  osc.connect(env); env.connect(dry); env.connect(reverbSend);
+  osc.start(now); osc.stop(now + 0.7);
+
+  // Sub thud (impact weight)
+  const thud = ctx.createOscillator();
+  const tEnv = ctx.createGain();
+  thud.type = 'sine';
+  thud.frequency.setValueAtTime(110 * strength, now);
+  thud.frequency.exponentialRampToValueAtTime(38, now + 0.09);
+  tEnv.gain.setValueAtTime(0.30 * strength, now);
+  tEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+  thud.connect(tEnv); tEnv.connect(dry);
+  thud.start(now); thud.stop(now + 0.12);
+}
+
+function playSink() {
+  if (!audio) return;
+  const { ctx, dry, reverbSend } = audio;
+  const now = ctx.currentTime;
+
+  // Descending glide
+  const osc = ctx.createOscillator();
+  const env = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(310, now);
+  osc.frequency.exponentialRampToValueAtTime(52, now + 1.1);
+  env.gain.setValueAtTime(0.22, now);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+  osc.connect(env); env.connect(dry); env.connect(reverbSend);
+  osc.start(now); osc.stop(now + 1.2);
+
+  // Bubble cluster
+  for (let i = 0; i < 7; i++) {
+    const t = now + i * 0.055 + Math.random() * 0.025;
+    const b = ctx.createOscillator();
+    const bg = ctx.createGain();
+    b.type = 'sine'; b.frequency.value = 450 + Math.random() * 800;
+    bg.gain.setValueAtTime(0.08, t);
+    bg.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    b.connect(bg); bg.connect(reverbSend);
+    b.start(t); b.stop(t + 0.12);
+  }
+}
+
+function playLaunch(strength) {
+  if (!audio) return;
+  const { ctx, reverbSend } = audio;
+  const now = ctx.currentTime;
+
+  const bufLen = ctx.sampleRate * 0.22;
+  const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) d[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+
+  const flt = ctx.createBiquadFilter();
+  flt.type = 'highpass';
+  flt.frequency.setValueAtTime(400, now);
+  flt.frequency.exponentialRampToValueAtTime(5000, now + 0.18);
+
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.14 * strength, now);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+  src.connect(flt); flt.connect(env); env.connect(reverbSend);
+  src.start(now); src.stop(now + 0.25);
+}
+
+function updateWaveAudio() {
+  if (!audio) return;
+  const { ctx, shimGain } = audio;
+  const target = Math.min(1, drops.length / 10) * 0.07;
+  shimGain.gain.setTargetAtTime(target, ctx.currentTime, 1.2);
+}
+
+// ── wave constants (identical to water.py) ───────────────────────────
+const SPEED = 9, WAVELENGTH = 7.5, DECAY_T = 0.22, DECAY_D = 0.045;
+const CREST_T = 0.80, FADE_LOW = 0.08, FADE_ZERO = 0.004;
+
+// ── game constants ────────────────────────────────────────────────────
+const GRAVITY = 4.0, POWER = 2.8, BOUNCE_DAMP = 0.52, VX_DAMP = 0.92;
+const MIN_VX = 1.8, MAX_PULL = 14, SKIP_CDN = 0.22;
+
+// ── layout ────────────────────────────────────────────────────────────
+let CW, CH, COLS, ROWS, WATER_Y, blankRow;
+
+const $waves   = document.getElementById('waves');
+const $band    = document.getElementById('band');
+const $stoneEl = document.getElementById('stone-el');
+const $hint    = document.getElementById('hint');
+const $score   = document.getElementById('score');
+
+function initLayout() {
+  const p = document.createElement('span');
+  p.style.cssText = "position:fixed;visibility:hidden;font-family:'Courier New',monospace;font-size:14px;white-space:pre";
+  p.textContent = 'M'.repeat(200);
+  document.body.appendChild(p);
+  CW = p.getBoundingClientRect().width / 200;
+  document.body.removeChild(p);
+  CH      = 14 * 1.18;
+  COLS    = Math.floor(window.innerWidth  / CW);
+  ROWS    = Math.floor(window.innerHeight / CH);
+  WATER_Y = Math.floor(ROWS * 0.6);
+  blankRow = ' '.repeat(COLS);
+}
+
+// ── Drop ──────────────────────────────────────────────────────────────
+class Drop {
+  constructor(x, y, born, str = 1) {
+    this.x = x; this.y = y; this.born = born;
+    this.life = 4.5 + Math.random() * 1.5;
+    this.str  = str;
+    this.seed = Math.random() * Math.PI * 2;
+  }
+}
+let drops = [];
+
+function waveComp(d, px, py, now) {
+  const age = now - d.born;
+  if (age < 0) return null;
+  const dx = px - d.x, dy = (py - d.y) * 2;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 0.5 || age < dist / SPEED) return null;
+  const ang = Math.atan2(dy, dx);
+  const wob = Math.sin(ang * 2 + d.seed) * 0.7 + Math.sin(ang * 3.1 + d.seed * 1.5) * 0.4;
+  const dw  = dist + wob * Math.exp(-dist * 0.05) * 2.2;
+  const ph  = (dw - SPEED * age) * (2 * Math.PI / WAVELENGTH);
+  const sv  = Math.sin(ph);
+  const ev  = Math.exp(-age * DECAY_T) * Math.exp(-dist * DECAY_D) * d.str;
+  return { sv, ev, dx: px - d.x, dy: py - d.y };
+}
+
+function ringChar(dxR, dyR, env) {
+  let tang = (Math.atan2(-dyR, dxR) * 180 / Math.PI + 360) % 180;
+  if (tang > 90) tang = 180 - tang;
+  if (env > 0.44 && Math.random() < 0.02)
+    return ['°', '˚', '·'][Math.random() * 3 | 0];
+  if (env < 0.13) return '˙';
+  if (env < 0.22) return '·';
+  if (tang < 30)  return env > 0.38 ? '~' : '-';
+  return '·';
+}
+
+// ── Stone types ───────────────────────────────────────────────────────
+// power: launch velocity multiplier (heavy stones fly shorter)
+// vxDamp: applied to VX_DAMP each bounce (>1 = keeps speed better = round; <1 = loses speed = angular)
+// bounceDamp: applied to BOUNCE_DAMP on Y-flip (>1 = bounces higher = round; <1 = dies sooner = angular)
+const STONE_TYPES = [
+  { char: '⬤', hollow: '◯', power: 0.82, vxDamp: 1.03, bounceDamp: 1.08 }, // heavy + round
+  { char: '●', hollow: '○', power: 1.00, vxDamp: 1.03, bounceDamp: 1.08 }, // round
+  { char: '■', hollow: '□', power: 0.82, vxDamp: 1.00, bounceDamp: 1.00 }, // heavy
+  { char: '★', hollow: '☆', power: 1.00, vxDamp: 0.94, bounceDamp: 0.88 }, // angular
+  { char: '▲', hollow: '△', power: 1.00, vxDamp: 0.94, bounceDamp: 0.88 }, // angular
+  { char: '◆', hollow: '◇', power: 1.00, vxDamp: 0.94, bounceDamp: 0.88 }, // angular
+];
+let bestSkips = 0;
+
+const stone = {
+  state: 'idle',
+  x: 0, y: 0, vx: 0, vy: 0,
+  spawnX: 0, spawnY: 0,
+  char: '●', hollow: '○',
+  powerMod: 1, vxDampMod: 1, bounceDampMod: 1,
+  skipN: 0, skipCdn: 0,
+  sinkT: 0, deadT: 0, flashT: 0,
+};
+
+function spawnStone() {
+  stone.spawnX = Math.round(COLS * 0.08);
+  stone.spawnY = WATER_Y;
+  stone.x = stone.spawnX; stone.y = stone.spawnY;
+  const type = STONE_TYPES[Math.random() * STONE_TYPES.length | 0];
+  stone.char         = type.char;
+  stone.hollow       = type.hollow;
+  stone.powerMod     = type.power;
+  stone.vxDampMod    = type.vxDamp;
+  stone.bounceDampMod = type.bounceDamp;
+  stone.state = 'idle';
+  stone.skipN = stone.skipCdn = stone.sinkT = stone.deadT = stone.flashT = 0;
+  stone.vx = stone.vy = 0;
+}
+
+// ── Mouse ─────────────────────────────────────────────────────────────
+let grabbed = false;
+
+function toGrid(e) {
+  return { gx: e.clientX / CW, gy: e.clientY / CH };
+}
+
+$waves.addEventListener('mousedown', e => {
+  initAudio();
+  if (audio) audio.ctx.resume();
+  if (stone.state !== 'idle') return;
+  e.preventDefault();
+  const { gx, gy } = toGrid(e);
+  const dx = gx - stone.x, dy = gy - stone.y;
+  if (Math.sqrt(dx * dx + dy * dy) < 3.5) {
+    grabbed = true;
+    stone.state = 'grabbed';
+    $waves.style.cursor = 'grabbing';
+    $hint.style.opacity = '0';
+  }
+});
+
+window.addEventListener('mousemove', e => {
+  if (grabbed) {
+    const { gx, gy } = toGrid(e);
+    let nx = gx, ny = gy;
+    const pdx = nx - stone.spawnX, pdy = ny - stone.spawnY;
+    const pd  = Math.sqrt(pdx * pdx + pdy * pdy);
+    if (pd > MAX_PULL) {
+      nx = stone.spawnX + (pdx / pd) * MAX_PULL;
+      ny = stone.spawnY + (pdy / pd) * MAX_PULL;
+    }
+    stone.x = nx; stone.y = ny;
+  } else if (stone.state === 'idle') {
+    const { gx, gy } = toGrid(e);
+    const dx = gx - stone.x, dy = gy - stone.y;
+    $waves.style.cursor = Math.sqrt(dx * dx + dy * dy) < 3.5 ? 'grab' : 'default';
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  if (!grabbed) return;
+  grabbed = false;
+  $waves.style.cursor = 'default';
+  $band.style.visibility = 'hidden';
+  const dx = stone.spawnX - stone.x, dy = stone.spawnY - stone.y;
+  const spd = Math.sqrt(dx * dx + dy * dy);
+  if (spd < 1.5) {
+    stone.x = stone.spawnX; stone.y = stone.spawnY;
+    stone.state = 'idle';
+    $hint.style.opacity = '1';
+    return;
+  }
+  stone.vx = dx * POWER * stone.powerMod; stone.vy = dy * POWER * stone.powerMod;
+  stone.x  = stone.spawnX; stone.y = stone.spawnY;
+  stone.state = 'flying';
+  playLaunch(Math.min(1, spd / MAX_PULL));
+});
+
+// ── Touch ─────────────────────────────────────────────────────────────
+function touchPos(e) {
+  const t = e.changedTouches[0];
+  return { clientX: t.clientX, clientY: t.clientY };
+}
+
+function releaseStone() {
+  if (!grabbed) return;
+  grabbed = false;
+  $band.style.visibility = 'hidden';
+  const dx = stone.spawnX - stone.x, dy = stone.spawnY - stone.y;
+  const spd = Math.sqrt(dx * dx + dy * dy);
+  if (spd < 1.5) {
+    stone.x = stone.spawnX; stone.y = stone.spawnY;
+    stone.state = 'idle';
+    $hint.style.opacity = '1';
+    return;
+  }
+  stone.vx = dx * POWER * stone.powerMod; stone.vy = dy * POWER * stone.powerMod;
+  stone.x  = stone.spawnX; stone.y = stone.spawnY;
+  stone.state = 'flying';
+  playLaunch(Math.min(1, spd / MAX_PULL));
+}
+
+$waves.addEventListener('touchstart', e => {
+  initAudio();
+  if (audio) audio.ctx.resume();
+  if (stone.state !== 'idle') return;
+  const { gx, gy } = toGrid(touchPos(e));
+  const dx = gx - stone.x, dy = gy - stone.y;
+  if (Math.sqrt(dx * dx + dy * dy) < 4.5) {
+    e.preventDefault();
+    grabbed = true;
+    stone.state = 'grabbed';
+    $hint.style.opacity = '0';
+  }
+}, { passive: false });
+
+window.addEventListener('touchmove', e => {
+  if (!grabbed) return;
+  e.preventDefault();
+  const { gx, gy } = toGrid(touchPos(e));
+  let nx = gx, ny = gy;
+  const pdx = nx - stone.spawnX, pdy = ny - stone.spawnY;
+  const pd  = Math.sqrt(pdx * pdx + pdy * pdy);
+  if (pd > MAX_PULL) {
+    nx = stone.spawnX + (pdx / pd) * MAX_PULL;
+    ny = stone.spawnY + (pdy / pd) * MAX_PULL;
+  }
+  stone.x = nx; stone.y = ny;
+}, { passive: false });
+
+window.addEventListener('touchend',    releaseStone);
+window.addEventListener('touchcancel', releaseStone);
+
+// ── Physics (dt = real elapsed seconds, capped to avoid spiral-of-death) ─
+function updateStone(dt) {
+  if (stone.state === 'flying') {
+    stone.flashT  = Math.max(0, stone.flashT  - dt);
+    stone.skipCdn = Math.max(0, stone.skipCdn - dt);
+    stone.vy += GRAVITY * dt;
+    stone.x  += stone.vx * dt;
+    stone.y  += stone.vy * dt;
+
+    if (stone.y >= WATER_Y && stone.vy > 0 && stone.skipCdn <= 0) {
+      stone.y    = WATER_Y;
+      stone.vy  *= -(BOUNCE_DAMP * stone.bounceDampMod);
+      stone.vx  *= (VX_DAMP * stone.vxDampMod);
+      stone.skipN++;
+      stone.skipCdn = SKIP_CDN;
+      stone.flashT  = 0.15;
+      const str = Math.max(0.35, 1 - stone.skipN * 0.06);
+      drops.push(new Drop(stone.x, stone.y, t, str));
+      playSkip(str, stone.skipN - 1);
+      if (stone.skipN > bestSkips) bestSkips = stone.skipN;
+      updateScore();
+      if (Math.abs(stone.vx) < MIN_VX) {
+        stone.vx = stone.vy = 0;
+        stone.state = 'sinking';
+        drops.push(new Drop(stone.x, stone.y, t, 0.9));
+        playSink();
+      }
+    }
+    if (stone.y < 1 && stone.vy < 0) { stone.y = 1; stone.vy *= -0.6; }
+    if (stone.y > ROWS + 2 || stone.x < -6 || stone.x > COLS + 6) {
+      stone.state = 'dead'; stone.deadT = 0;
+    }
+  }
+  else if (stone.state === 'sinking') {
+    stone.sinkT += dt;
+    if (stone.sinkT > 0.75) { stone.state = 'dead'; stone.deadT = 0; }
+  }
+  else if (stone.state === 'dead') {
+    stone.deadT += dt;
+    if (stone.deadT > 1.8) { spawnStone(); $hint.style.opacity = '1'; updateScore(); }
+  }
+}
+
+function updateScore() {
+  if (stone.state === 'idle' || stone.state === 'dead') {
+    $score.textContent = bestSkips > 0 ? `best: ${bestSkips}` : '';
+  } else {
+    $score.textContent = stone.skipN > 0
+      ? `skips: ${stone.skipN}  best: ${bestSkips}`
+      : (bestSkips > 0 ? `best: ${bestSkips}` : '');
+  }
+}
+
+// ── Stone char ────────────────────────────────────────────────────────
+function stoneChar() {
+  switch (stone.state) {
+    case 'idle': case 'grabbed':
+      return stone.char;
+    case 'flying':
+      if (stone.flashT > 0) {
+        if (stone.skipN <= 3) {
+          return stone.flashT > 0.08 ? stone.hollow : stone.char;
+        }
+        const period = Math.max(0.018, 0.055 - (stone.skipN - 3) * 0.006);
+        return Math.floor(stone.flashT / period) % 2 === 0 ? stone.hollow : stone.char;
+      }
+      return stone.char;
+    case 'sinking':
+      if (stone.sinkT < 0.18) return stone.char;
+      if (stone.sinkT < 0.34) return stone.hollow;
+      if (stone.sinkT < 0.48) return '·';
+      if (stone.sinkT < 0.60) return '˙';
+      return null;
+    default: return null;
+  }
+}
+
+// ── Render waves (dim layer) ──────────────────────────────────────────
+function renderWaves() {
+  const rows = [];
+  for (let y = 0; y < ROWS; y++) {
+    let row = '';
+    for (let x = 0; x < COLS; x++) {
+      let bW = 0, bDx = 0, bDy = 0;
+      for (const d of drops) {
+        const c = waveComp(d, x, y, t);
+        if (!c || c.sv <= CREST_T) continue;
+        const w = c.sv * c.ev;
+        if (w > bW) { bW = w; bDx = c.dx; bDy = c.dy; }
+      }
+      if (bW >= FADE_LOW) {
+        row += ringChar(bDx, bDy, bW);
+      } else if (bW >= FADE_ZERO) {
+        const p = ((bW - FADE_ZERO) / (FADE_LOW - FADE_ZERO)) ** 3;
+        const h = ((x * 374761393 + y * 668265263) & 0x7FFFFFFF) % 1000;
+        row += h < p * 1000 ? '˙' : ' ';
+      } else {
+        let ch = ' ';
+        for (const d of drops) {
+          const age2 = t - d.born;
+          if (age2 < 0 || age2 > 0.35) continue;
+          const dx2 = x - d.x, dy2 = (y - d.y) * 2;
+          const r2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+          if      (r2 < 0.8 && age2 < 0.09) { ch = '○'; break; }
+          else if (r2 < 1.6 && age2 < 0.18) { ch = '◦'; break; }
+          else if (r2 < 2.8 && age2 < 0.28) { ch = '°'; break; }
+          else if (r2 < 3.5 && age2 < 0.35) { ch = '·'; break; }
+        }
+        row += ch;
+      }
+    }
+    rows.push(row);
+  }
+  $waves.textContent = rows.join('\n');
+}
+
+// ── Render stone (bright white span) ─────────────────────────────────
+function renderStone() {
+  const sch = stoneChar();
+  if (sch) {
+    // When arc is too shallow to span a full row, lock visual Y to water line.
+    // This stops the stone flickering between rows on fast low skips.
+    const arcAboveWater = WATER_Y - stone.y;
+    const visY = (stone.state === 'flying' && arcAboveWater < 1.0)
+                  ? WATER_Y
+                  : stone.y;
+    $stoneEl.style.left = ((stone.x | 0) * CW) + 'px';
+    $stoneEl.style.top  = ((visY  | 0) * CH) + 'px';
+    $stoneEl.textContent = sch;
+  } else {
+    $stoneEl.textContent = '';
+  }
+}
+
+// ── Render band (red ASCII layer, Bresenham) ──────────────────────────
+function renderBand() {
+  if (stone.state !== 'grabbed') {
+    $band.style.visibility = 'hidden';
+    return;
+  }
+  $band.style.visibility = 'visible';
+
+  const x0 = stone.spawnX | 0, y0 = stone.spawnY | 0;
+  const x1 = stone.x | 0,     y1 = stone.y | 0;
+
+  const adx = Math.abs(x1 - x0), ady = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+
+  // pick char based on dominant angle
+  let ch;
+  if      (adx === 0)          ch = '|';
+  else if (ady === 0)          ch = '-';
+  else if (adx > ady * 2)      ch = '-';
+  else if (ady > adx * 2)      ch = '|';
+  else                         ch = (sx === sy) ? '\\' : '/';
+
+  // sparse cell map: y → {x → char}
+  const cellMap = new Map();
+  const mark = (x, y, c) => {
+    if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return;
+    if (!cellMap.has(y)) cellMap.set(y, new Map());
+    cellMap.get(y).set(x, c);
+  };
+
+  let x = x0, y = y0, err = adx - ady, step = 0;
+  while (true) {
+    mark(x, y, step % 2 === 0 ? ch : '·');
+    step++;
+    if (x === x1 && y === y1) break;
+    const e2 = 2 * err;
+    if (e2 > -ady) { err -= ady; x += sx; }
+    if (e2 <  adx) { err += adx; y += sy; }
+  }
+  mark(x0, y0, '+');  // anchor marker
+
+  const lines = [];
+  for (let ry = 0; ry < ROWS; ry++) {
+    if (!cellMap.has(ry)) { lines.push(blankRow); continue; }
+    const arr = new Array(COLS).fill(' ');
+    for (const [cx, c] of cellMap.get(ry)) arr[cx] = c;
+    lines.push(arr.join(''));
+  }
+  $band.textContent = lines.join('\n');
+}
+
+// ── Main loop ─────────────────────────────────────────────────────────
+let t = 0;
+let lastFrameTs = null;
+
+function frame(ts) {
+  const realDt = lastFrameTs === null ? DT : Math.min((ts - lastFrameTs) / 1000, 0.1);
+  lastFrameTs = ts;
+  t += DT;
+  updateStone(realDt);
+  drops = drops.filter(d => t - d.born < d.life);
+  updateWaveAudio();
+  renderWaves();
+  renderStone();
+  renderBand();
+  requestAnimationFrame(frame);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+initLayout();
+spawnStone();
+window.addEventListener('resize', () => { initLayout(); spawnStone(); drops = []; });
+function startGame() { requestAnimationFrame(frame); }
+
+// ── Splash ────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  const SP_ILLUS = `                                                                                                                                                                                                                            
+                                                                                                                                                                                                                            
+                                                                                                                                                                                                                            
+                                                                                                                                                                                                                            
+                                                                                                                                                                                                                  ..        
+                                                                                                                                                                                              .,,.             ,****.       
+                                                                                                   .,:::,.....                                               ....                          ;%#@###%:         ,??;.          
+                                                                                                ,;;::..,,:;;;;+;,.                                       ,+?S####S?;.                   .:S@#+:..:?@?       +%:             
+                                                                                             ,:;:..:+?S@@@@@@@@@@#%+,                                ..:%@@@@@@@@@@@#*.                ;%@#;       :SS.    *%               
+                                                                                        ...,:,..;?#@@@@@@@@@@@@@@@@@@%:                            .,+%@@@@#%?**??%S#@#;              ?#@*           %S   +?                
+                                                                                     .:;:,...;%#@@@@@@@@@@@@@@@@@@@@@@@%,                         ,+%@@@@S?*;:,...,;?#@@*            %@#:         . . ?? :%     ..          
+                                                                                   .;;,   :?#@@@@@@@@@@@@@@@@@@@@@@@@@@@@+ ..                    +%#@@@S*+;.         ;S@@?          %@#,          ,..;,%;%+;;::             
+                                                                                 .;;,   ;S@@@@@@@@@@@@@@@#S#@@@#SSSSS@@@@@%.::                 .%@@@@@?;;,            .?@@?        *@#,         ...:+?@S#@@@#?,....         
+                                                                               .::.   ;S@@@@@@@@@@@@@@S??S@@%+:..,,:::+%@@@S.:;               ,S@@@@#;:;                *@@+ .,   ;@#,  ,;    ,+:,:,.+%%%SS%+:,;+...        
+                                                                              ,:. ..,%@@@@@@@@@@@@@@S+*#@#*,    ...,:;*++S@@#.;:             ,#@@@@#,,,                  +@@,... .#@:  .;.  ,. .,,:,,... ..,,,,::..         
+                                                                            .,. ,:,?@@@@@@@@@@@@@@S;+S@S;.            .+%??#@S +,           ,S#@@@S. .          ,;. ,: .  *@% ,*.?@* ;;  .; ,.    ......      ....          
+                                                   :;,     .,              ., ,+:;S@@@@@@@@@@@@@@*:%@@+                 .?SS@@% ;          .S?#@@S.              ,, :,  +*,?@+S@+@S+#@S+?*, .,                              
+                                                 :%@@?     :+                +*,?@@@@@@@@@@@@@@S:*@@%,                    :#@@@+.,         %*S@#S.,               . :??;.S#+#S%#S@%@@@@@*,                                  
+        ...........   .....                     *@@@?                      :%;:S@@@@@@@@@@@@@@?:S@@+                       .S@@@,.        *?%@%#,,,      ...,,::,,.  .*@##@#%@%@@@S?*S##+:....,.....                        
+        .         .........  .............     ;@@@*                     .?S,+@@@@@@@SS@@@@@@++@@S,     ........            .%@@S        ;%?@?#;,:    .,, ,::::,;+;;,:+%@%%@@@@#%?%#%#%:,;;:,::;;:...  .                    
+                           .,.....            .@#?;                 ..  :#?,%@@@@@@@%%@@@@@#+%@@?.      ..                    %@@+      .S*@?%? :     ?: ,*.    ;:. .?%;+?;?##S%#S@##%;%+..*+   ;S.+   .;*                  
+                  ..,,,,,..                   S?.                  ,. .?@;:#@@@@@@#?S@@@@@#?S@@*              ::  .,          .S@#.  .  ?%#S*# .      .,. ,. ;%: ,;:,::+++;:;;::::,::;+;;;;:. ,::...   .+%.      ;:         
+        .,:;;++*+*+;:,.........       ,:     *?    ?+   .;.      .:. :#@:+@@@@@@@%*#@@@@@@S#@@+         .....     ,%?:  .,     ,@@+  %..@#@+#;     .,      ;%%;.:;::;;,,.  .  ...,:;::;:::,,,,,    ..,::,       .,.         
+        *?*+;:,.    .,,,,,........,. .#?    :*     .    :+.     ;;  *@S:%@@@S@@@?*@@@@@@@@@@@;    .,,,,.....        .;,    .:   ;@# ,#++@@%?%  .,  .;.   ,++.    .;,,,,,;::,,,  .,,,::::,,,,.    ....      .,.              
+            .,:;:;%#S?+::::::::,,,,. ?@.    ,         +%      .+: ,S@%;S@@#?S@@+?@@@@@@@@@@@:..                ,.   ,.      *%,,,?@;*@;S@@*#,,+#;  .+;.  .    ,. :: .   .      ..........            ..,:::,.               
+        +*+;:,.   .:;;;::;:,.  +;   +@*              ?S,     ;*. *@@%+#@@S;S@#;%@@@@@@@@S#@:,:              .. :+.  ,??:::   ?#%#:#S;@?@@S%?+@@@#*%S;     .:+*+.    ..,,,:::,,,,,.....         ..,,,,,,,.                   
+        :.   ,:++++;,..        ?+  ,@%.       .:   :##.    .*+ ,S@@%?@@@?.S@S:S@@@@@@@@%%@,:;               .,    .;, :S@@S*:;@@@%+@+#@@@##+@@@@@@@*  .,+%S?:..,.                      . .......                            
+        ?%S##S%+:.                .S@,        %+ ;%@#.    :%: ;#@@S%@@@;.#@%:#@@@@@@@@%?@:+?  :.               ....,;?**@@@@@@##@@;#%?@@@@@S#%@%?@@@%S@@#+.   ::                       .......                              
+        **+:,           %?.   :. .%@%       .?@#S@@@, ++ *S. ?@@@##@#@:,#@*:#@@@@@@@@?+@+*#. ::        ..,,,:,,,,,,. .?#@@@S#@S;#@%?@?@@@@@S?+@@@@@@@@@;  .,,,......                                               .        
+                       ,@@,  .#::S@@#:     ;#@@@@@@@;%S:%? ,S@@@@@#%S,,#%;:#@@@@@@@@%:@**@, ,+     .,.......,,:;:::;;.:*?#@S%#@@@@@?@S@@@@S%S*@SS@@@@S%++:  ,::::::,,,,,.                                 ....,:;*S@:       
+                        %%   +@#@@@@@% .S?*@@@@@@@@@@%;#* ;#@@@@@S?%,,#*::@@@@@@@@@%.#%?@+ .*     ..  .:;+++;:,.,:;;++;:?@@@%;%#@@##%@@@@%?@+;*:S##@@##*:;:,,..,;;++*+;,.                              ,,;*?S@@@@@#?.       
+                   :*,      .#@@@@@@@@;S@@@@@@@@@@@@**#: *@@@@@@@?S+;?+;:*?%S##@@@@,S@#@%  +:    . .+??+:.    :??*+:,,;;,+@@@*+%?S*%@@#@%?@@#SS+*S@@S;:;++::+?; .,;;:+%#%;   .,                              :@@#;          
+                   ,%,      *@@@@@@@@@@@@@;*@@@%%@@?S@:,S@@@#%?*;;;;+*????+++;;;;+;+?%S#*:+*    +,+#%,       S@;    ,@*.  ++*%%@@%S*?%;;%@@@@@@S%%%#%?. .%#. .%#: .,;  ,@@%  .:?:                           ,+%+.           
+          .,,:;;::,  :,     #@@@@@@@@@@@@@S@@@S+%%*+?;:+*;:,,,+?%#@@@@@@@@@@@@@@#S%?**+;;+*++;:.;.?@?.     , :%?:.   ;*++::,.  ,+?%#%%SS##S%%?++;;?#%*,.:;, .:S#;      ;@@%    %@,       .;,               ,;: ;,           
+        ?S%%?+;:,    +@, ;.;@@@@@@@@?%@@@@#?+:;++++*??%***?%#@##S#@@@@@@@@@@@@@@@@@@@@@@#S*:.,;;:, :?%?+,. ,:,.:+;, ,. .:;+***+:,,.,::.. ..,,,:,,,.   .,::;?%%+.    ,+S@%;   ,*S;         ?#             .+S#%.*.           
+        ++;;::,,,.   .@%.S?S@@@@@@@%.?SS*;,;*%##@@@#SSSS#@@@#SS#@@@@@@@@@@@@@@@@@@@@@#%#@@@@S*:::*+   ,+::*+;..,+?, :+;:,  ::,:;++;;::,,..,,.,,::;+?????*+;,   .:;*?%?;.  .,;+:         .;%:           .?@@@%:              
+        :::,.    ;+   S@%@@@@@@@@@#:::..:+%#SSS#@@@##@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@###@@@@@@#:?, S. ,+;   ,;+S#+.::.  .:..:.   .     ,:;;::+++++;;;::,,.,::+***+;:.      ..          .,,,            :%?::.                
+                 ,.   S@@#?@@@@@S*,,;+?S@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@S:+%: *?%%:  :*S@@*.   .;**+, ,,,,.,,,....             ,,:::;;:,,.      ..                               :;.           *,       
+                 ;S:  S@@@@@#?;,:+%#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#%%@@@@@@@#?+?+*: *@@;;?#@@@@,  ,;?S%+,.:::,,,,     ........,,,,,,,,,,,,,,,,::::,,.                 ....,.                        ?@,       
+                  *@+;@@@@@*.;?#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#SS###@@@@#%?*++,.?* *@@@@@@@@#*:*S@#?,     ....,:;*??. :::::::::::,:::::::,,...                 .,:;;;:,.                         ,S@@,       
+                  .@@@@@@S,.?@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#SSS#@@@@@@S%***;.  *?* *@@@@@@@@##@@S*:,:;.     .+%SS%*:                                  .,,;;+***+;;:,,.               .          +#@@@,       
+                   %@@@#;.++@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#S#@@@@@@#S?++?*+.   :*?, %S%@#%S@@@@@SS@#%+,      .,.                   ......,,,::;;++??%%????*++;;::::,,.             .,.         :%@@@#:        
+                   +@#;,+#%+@@@@@@###S#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#%???+,:*?*:.,   ,;;: +%:*+*S@@@@@@@S;.            ...,   ,:     ,,:;;+++++***?*+*+*;;+:;;;++;++;;:,.                 .         .*@@@@?.         
+        ..,,..     +@,,#%S#+@@@@@%%S##@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#%???%SS%+??+,      .:,: ,* :*#@@#??*@@@S%%?;;;**?SS%?%%*;:   .,                          ...,,,,.                    .           ,*#@@@@*           
+        .       . ,#: S@S,#S*#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#SSS##@##%?++;.    .;  ,   .S*?#@@@@S+*;@@@@@@@@@@@#%*;,.                                                                          ;%@@@@@@;            
+          .,::,.. #% ;;%@%.SS*@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#@@@@@@@###%?+:,..    .    ++    ,*#@@@@@@@@@@@@@@@@@#%*;,.         .:+??;                                                             .:*S@@@@@@@:             
+        ++;:.     %? ****S+,%S*S@@@@@@@@@@@@@@@@@@#S%%%%SS%%S@@@#S%*+:.         +S?  ,:   .;%S##@@@@@@@@@@@@S?+:.                ....                                                           .:;*S@@@@@@@@:              
+            ..,,. :S,:*?**??*?*,??%%%SSSS%%SS%??*?++*?%SS#@@@#%?+:,             ,. ,*#, ,;+?*%**@@@@@@@@@@@#%+,.....    ...                 .                                               .,:;:;*S@@@@@@@@;               
+        :;;;:..    ,*;.;*?**??*,+?**;,,::;+*?%S#@@@@@@@##S%?+:.        ,?:       .*@@:,++*?S#*+#@@@S;*@@@@@@@@@@@##S%?. .,;*;.              ,+,                                          .,,,,.,+S@@@@@@@@@+                
+        ,,           ;+:,;*??*?+,?????***?%%%?*+++++++:,,..            :+.     .*#@@:,*?S@@@#S@@@@@@S#@@@@@@S+:,,. ...     .*#;              :@?.                                       ..   ,*#@@@@@@@@@@*  .              
+                 ...  .:;;::*???+*****??***???*+;:         .....    ;%+      ,*#@@@#*#@@@@@@@@@###S%S######@%;:::::.         %@,              *@%  .                                      ,:%@@@@@@@@@@@@%  ,:     ,,       
+            ..,,......   :*+,.,+?????**********???,  ....,,,...   ;%@*  .:?*+#@@@@@@@@@@@@@@@@@?:.     .. .,,:::;;**.       :@S.              :@@+ :;                     :?%+         .:;;+#@@@@%*;,:S@S  ::     .S:       
+        .:::,...,,:,.  ...;*%?+:,::;*????*******?*  :;+***+:...:*S@@S++S#@@@@@@@@@@@@@@##%%%%S#@@S%+,               .,.   ,?#?.               ?@@* .S              .,,    :;,       .,,,,;%@@@%;.     SS .:,     .%@,       
+        ,,..,:;;;:.. .,,;??+,:+S%?+;,,,:;*??????+:+*?*+;:.   ;%@@@@#S#@@@@@@@@@###@@@@@?:      .,:;+; ,*+       .,:,.  .,+*+.                +@@S. ?S          ..  :?;             ....;%@@#**?S+    SS.:;.     .%@+        
+        ,;+**+:,....,:;+;:.,;+????%SS%*;:..:;+;,,::,.,:;*???#@@@@@@@@@%%*?????*;,.,,::;++,             ..   .,;;:,.   .,:.                 .?@@S. ?#,    .:+?%S###*                .:?#@@#+.%@#+.  ,S%:*;      .S@;         
+        ??*;,.  .::;++;,.:*%S%%%???*+++%S%?+;::;;++?S@@#S%%#?:+?S?;,,.                   ..,,,,.        .:;**+,.                          +@@#* :%?.   .?@@@@@@@@%:        .    .:?#@@@#*, ,::    +#%**.      .##:          
+        :,. .,;*??+:,.:+S###S%%%%?*++*???????*?%%%????+;.  ,:;;,           ...,,,::;+;;:,..      .,:;*???*;,,,..                       ,*@@#+. ;+,      +?%%%?*;,           .,+?#@@@@@?,  +*   .+S@@?:       .#%.           
+        .:;*%S%?;,.:*S@@@#S%%%?**;:;%SS?+:;*???**??**+::..,,,.   ,:;+;:;+++**;+;;:,..    .,:;+*?%%%?**+;:::,,.                      ,+S#S*:   ..                   .,,,.  ;?S@@@@@@@#;       ,+#@@?,        :S;             
+        ?S#S?+::+?#@@@@#S%%??*+:,;?S%+,,+%S??*+:;+;::,. ..   ..  .,. .,,        .:;:;++*****+;::,,,,,,,,.                       ,;*??*:.                       .,:;:. .,*S@@@@@@@@@S,      :?#@@*,         ;?,              
+        SS*++?S@@@@@#SS%%?**+;:+S#?:,:?#S?+;;,,;::,....,.  .       ,..     ...;?+,,,..                                      .:;++;,.                       .:;+;:. .;?S@@@@@@@@@@@@%   .:*#@S%%,          ;;                
+        +*?S@@@@@###S%??%?***%#S*,,*##?+;;,  :;,.  ,;:.      .. .::,        ,++,                                       ..,:::,.                        ,;+*+;,..:+%@@@@@@@@@@@@@@@@@#SS@@@?+?+          .:,                 
+        S@@@@@@###S%?%SS%SSS%+,.;%#%+;;;,..;;,   ;*:...   .::.,;:,        :??;,.                                       ...                        ,;*??*;:,,;*S@@@@@@@@@@@@@@@@@@@@@@@@S;:**,           .                   
+        #@@@@@@#S%%#@@SS#S*:.:*#@?;;*;,:;*+,  .+?+,.,,. ,+*:,++,        :%S++;.                                                             .:;*%SS?+:::+%#@@@@@@@@@@@@@@@@@@@@@@@@@#?;:*%;                                 
+        ,,,,,,,..,,,,.,,,   .,:,. .,   .,.    ,:   ,    ,,  ,,          ,, .,                                                              ..,::,.    ,::,,,,,,,,,,,,,,,,,,,,,,,,,,,.  ,:                                   `;
+  const spStage  = document.getElementById('sp-stage');
+  const spTitle  = document.getElementById('sp-title');
+  const spPrompt = document.getElementById('sp-prompt');
+  const DELAY    = 22;
+
+  SP_ILLUS.split('\n').forEach(ln => {
+    const el = document.createElement('span');
+    el.className = 'spln';
+    el.textContent = ln;
+    spStage.appendChild(el);
+  });
+
+  const spSpans = spStage.querySelectorAll('.spln');
+  const spTotal = spSpans.length * DELAY;
+  spSpans.forEach((el, i) => setTimeout(() => el.classList.add('on'), i * DELAY));
+  setTimeout(() => spTitle.classList.add('on'), spTotal + 100);
+  setTimeout(() => {
+    spPrompt.classList.add('on');
+    document.addEventListener('keydown', spGo, {once:true});
+    document.addEventListener('click',   spGo, {once:true});
+  }, spTotal + 900);
+
+  function spGo() {
+    spPrompt.classList.remove('on');
+
+    const cv  = document.createElement('canvas');
+    cv.style.cssText = 'position:fixed;inset:0;z-index:300;pointer-events:none;';
+    cv.width  = window.innerWidth;
+    cv.height = window.innerHeight;
+    document.body.appendChild(cv);
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#000';
+
+    const SCX = cv.width  / 2, SCY = cv.height / 2;
+    const maxR = Math.sqrt(
+      Math.max(SCX, cv.width  - SCX) ** 2 +
+      Math.max(SCY, cv.height - SCY) ** 2
+    ) + 20;
+
+    const T0  = performance.now();
+    const DUR = 1400;
+
+    function spFrame(ts) {
+      const p  = Math.min((ts - T0) / DUR, 1);
+      const ep = 1 - Math.pow(1 - p, 3);
+      const r  = ep * maxR;
+      const tt = (ts - T0) / 170;
+      const amp = 18 * (1 - ep * 0.6);
+
+      ctx.beginPath();
+      const STEPS = 320;
+      for (let i = 0; i <= STEPS; i++) {
+        const angle = (i / STEPS) * Math.PI * 2;
+        const w = Math.sin(angle * 7 + tt      ) * amp
+                + Math.sin(angle * 3 - tt * 1.4) * amp * 0.35;
+        const rad = Math.max(0, r + w);
+        const x = SCX + Math.cos(angle) * rad;
+        const y = SCY + Math.sin(angle) * rad;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      if (p < 1) {
+        requestAnimationFrame(spFrame);
+      } else {
+        ctx.fillRect(0, 0, cv.width, cv.height);
+        document.getElementById('splash').remove();
+        startGame();
+        requestAnimationFrame(() => requestAnimationFrame(() => cv.remove()));
+      }
+    }
+    requestAnimationFrame(spFrame);
+  }
+});
+
+</script>
+
+<div id="splash">
+  <pre id="sp-stage"></pre>
+  <pre id="sp-title">                                                                                                                                                                                                                            
+        ,::::;;;:.     .:;;;++:.      .;;;;;;;..:::::.  ,;:,       ,;;;++,  :::::.  .;:: .::::, ::::;;;:, .:::;;;;:. ,::::, ,:::     ,:::.   .:;;;;;;:.         .;+;;;;;:       .;.      :::;.       :::: ,:::;;;;;         
+        .:@@*,:?@@,   *#%:,.,;S#?.  :%#*:,.,:S+ ,#@%. .+%+,.      *@;..,*%  .%@#.  ;%?:. .:@@*. .?@@:,+@@+ ,@@?,:%@#..;@@;. .*@@S,   .+#.  .?#%;,..,;#;       :%#*:,.,,;#.      S@S.     .?@@S.     ?@@%. .+@@;,::%         
+         .@@:  ;@%.  ?@S      .#@? :@@;      ..  %@* +*;.        .@@+,.      *@S :?+.     .#@:   +@S  .#@;  S@+  +@S. ,@@,   +?;@@?.  :%  .S@?       .       :@@;       .      ?*%@%      **?@S.   ?*%@*   :@#.  :          
+         ,@@:;S#:    #@?       %@# *@#.          S@%%@%.          ,?S##@#?.  *@S?@#,      .@@;   +@S,;*+,   #@+:+*;   :@@:   *? .?@@+ :%  :@@:    .,. .      *@#.    ... .    *% ,#@?     ?* %@S. ?* S@*   ;@@*+*#.         
+         .@@: *@S:   ?@#.      #@+ ,@@*          %@*.+@@?.        ,    ,S@+  *@S ;#@%,    .#@:   +@S        S@+       ,@@,   +?   :S@S?%  .S@%    ,:S#?.     ,@@*    ,;##+   ;S+++*#@*    **  %@%%*  S@*   ;@#.  , .        
+        .:@@+. :@@*, .*#S;,.,:%S+   ,%@S+:,,,;, ,#@%. .*@@?,     .#+,..:S%. .%@#.  +@@%:..:@@*. .?@@,.     ,@@?.     .;@@;. .?%.    ;#@S   .?#S;,..,#@*       :%@%;,..:@@: .;@:    +@@*. .%%.  %@* .,#@%.  +@@;::,?+        
+        ,::::,  .;;:   .:++;;;:       .;+++;;:..:::::   ,;;:.     :++;;;,   :::::.  .;;;..::::, :::::,    .:::::     ,::::, ,:::      ;;     .:++;;;:,.         .;++;;;:,  ,;::.  .:::;: :::,  .:  .:::::  :::;;;;;.        </pre>
+  <div id="sp-prompt"><span>·</span> press any key <span>·</span></div>
+</div>
+</body>
+</html>
