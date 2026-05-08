@@ -655,7 +655,7 @@ function stoneChar() {
 }
 
 // ── Render waves (dim layer) ──────────────────────────────────────────
-function renderLayer(el, dropList) {
+function renderLayer(el, dropList, crestT = CREST_T) {
   const rows = [];
   for (let y = 0; y < ROWS; y++) {
     let row = '';
@@ -663,7 +663,7 @@ function renderLayer(el, dropList) {
       let bW = 0, bDx = 0, bDy = 0;
       for (const d of dropList) {
         const c = waveComp(d, x, y, t);
-        if (!c || c.sv <= CREST_T) continue;
+        if (!c || c.sv <= crestT) continue;
         const w = c.sv * c.ev;
         if (w > bW) { bW = w; bDx = c.dx; bDy = c.dy; }
       }
@@ -694,7 +694,9 @@ function renderLayer(el, dropList) {
 }
 
 function renderWaves() {
-  renderLayer($waves, drops.filter(d => d !== winDrop));
+  // More drops → raise crest threshold → thinner rings, less fill overlap
+  const dynCrestT = Math.min(0.93, CREST_T + drops.length * 0.008);
+  renderLayer($waves, drops.filter(d => d !== winDrop), dynCrestT);
 }
 
 function renderWinRing() {
