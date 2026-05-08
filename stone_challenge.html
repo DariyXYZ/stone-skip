@@ -287,7 +287,7 @@ const CREST_T = 0.80, FADE_LOW = 0.08, FADE_ZERO = 0.004;
 // ── game constants ────────────────────────────────────────────────────
 const POWER = 4.2, VX_DAMP = 0.92;
 const MIN_SPD = 1.8, MAX_PULL = 14;
-const CURVE_PER_SKIP = 0.15;
+const CURVE_PER_SKIP = 0.07;
 
 // ── layout ────────────────────────────────────────────────────────────
 let CW, CH, COLS, ROWS, WATER_Y, blankRow;
@@ -374,12 +374,12 @@ function ringChar(dxR, dyR, env) {
 // vxDamp: applied to VX_DAMP each bounce (>1 = keeps speed better = round; <1 = loses speed = angular)
 // bounceDamp: applied to BOUNCE_DAMP on Y-flip (>1 = bounces higher = round; <1 = dies sooner = angular)
 const STONE_TYPES = [
-  { char: '⬤', hollow: '◯', power: 0.82, vxDamp: 1.03, bounceDamp: 1.08 }, // heavy + round
-  { char: '●', hollow: '○', power: 1.00, vxDamp: 1.03, bounceDamp: 1.08 }, // round
-  { char: '■', hollow: '□', power: 0.82, vxDamp: 1.00, bounceDamp: 1.00 }, // heavy
-  { char: '★', hollow: '☆', power: 1.00, vxDamp: 0.94, bounceDamp: 0.88 }, // angular
-  { char: '▲', hollow: '△', power: 1.00, vxDamp: 0.94, bounceDamp: 0.88 }, // angular
-  { char: '◆', hollow: '◇', power: 1.00, vxDamp: 0.94, bounceDamp: 0.88 }, // angular
+  { char: '⬤', hollow: '◯', power: 0.82, vxDamp: 0.88, bounceDamp: 1.08 }, // big heavy round: slow start, high energy loss/skip
+  { char: '●', hollow: '○', power: 1.00, vxDamp: 1.02, bounceDamp: 1.08 }, // small round: best skipper, retains speed well
+  { char: '■', hollow: '□', power: 0.78, vxDamp: 0.84, bounceDamp: 1.00 }, // big heavy block: sinks fastest
+  { char: '★', hollow: '☆', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88 }, // small angular: medium retention
+  { char: '▲', hollow: '△', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88 }, // small angular: medium retention
+  { char: '◆', hollow: '◇', power: 1.00, vxDamp: 0.98, bounceDamp: 0.88 }, // small flat diamond: decent skipper
 ];
 // ── Challenge ─────────────────────────────────────────────────────────
 function computeAchievable() {
