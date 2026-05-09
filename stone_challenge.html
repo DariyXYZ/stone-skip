@@ -324,8 +324,8 @@ function inFishPt(sb, u, ph, amp, bend) {
 }
 
 // ── fish constants ────────────────────────────────────────────────────
-const FISH_CALM_DELAY  = 9;     // seconds of calm before first fish
-const FISH_SPAWN_GAP   = 8;     // seconds between subsequent fish
+const FISH_CALM_DELAY  = 7;
+const FISH_SPAWN_GAP   = 6;
 const FISH_MAX         = 5;
 const FISH_SPEED       = 9;
 const FISH_FLEE_SPEED  = 22;
@@ -400,9 +400,9 @@ class Fish {
     this.coastLeft = 1.0 + Math.random() * 2.0;
     this.swimAmp   = 0;
     this.state = 'swimming';
-    this.curveRate  = (Math.random() - 0.5) * 0.28;  // rad/s — wide arcs (~60 char radius)
-    this.curveTimer = 3.0 + Math.random() * 6.0;
-    this.bubbleTimer = 5 + Math.random() * 12;
+    this.curveRate  = (Math.random() > 0.5 ? 1 : -1) * (0.08 + Math.random() * 0.12);
+    this.curveTimer = 6.0 + Math.random() * 10.0;
+    this.bubbleTimer = 1.5 + Math.random() * 3.0;
     this.fleeAngle   = (Math.random() - 0.5) * 1.1;
     this.tailAngle   = this.angle;
   }
@@ -917,34 +917,22 @@ function updateFish(dt) {
       }
       f.animPhase += f.animFreq * dt * f.swimAmp;
 
-      // Curved arc locomotion: curvature changes periodically → long gentle sweeping arcs
+      // Curved arc locomotion: long gentle arcs — fish traverse the field and drift off
       f.curveTimer -= dt;
       if (f.curveTimer <= 0) {
-        f.curveRate  = (Math.random() - 0.5) * 0.28;
-        f.curveTimer = 3.0 + Math.random() * 6.0;
+        // Keep same turning direction 60% of the time (S-curves), flip 40% (loops/reversal)
+        const flip = Math.random() < 0.4;
+        const sign = flip ? -Math.sign(f.curveRate) : Math.sign(f.curveRate);
+        f.curveRate  = sign * (0.08 + Math.random() * 0.12);
+        f.curveTimer = 6.0 + Math.random() * 10.0;
       }
       f.angle += f.curveRate * dt;
 
-      // Speed: 0.3× at glide, 1.0× at peak tail beat — never fully stops
+      // Speed: 0.3× at glide, 1.0× at peak tail beat
       const tailThrust = Math.abs(Math.cos(f.animPhase)) * f.swimAmp;
       const spd = f.speed * (0.3 + 0.7 * tailThrust);
       f.x += Math.cos(f.angle) * spd * dt;
       f.y += Math.sin(f.angle) * spd * dt;
-
-      // Soft boundary: gently nudge curvature toward center swimming zone
-      const cx = COLS * 0.32, cy = ROWS * 0.50;
-      const bdx = f.x - cx, bdy = f.y - cy;
-      const bdist = Math.sqrt(bdx * bdx + bdy * bdy);
-      const maxR  = Math.min(COLS, ROWS) * 0.46;
-      if (bdist > maxR * 0.6) {
-        const toCenter = Math.atan2(-bdy, -bdx);
-        let dca = toCenter - f.angle;
-        while (dca >  Math.PI) dca -= 2*Math.PI;
-        while (dca < -Math.PI) dca += 2*Math.PI;
-        const urgency = Math.min(1, (bdist - maxR * 0.6) / (maxR * 0.4));
-        f.curveRate += dca * urgency * 0.8 * dt;
-        f.curveRate  = Math.max(-0.5, Math.min(0.5, f.curveRate));
-      }
 
       // Boids separation — prevents overlap
       for (const g of fish) {
@@ -969,7 +957,7 @@ function updateFish(dt) {
         vy: -(0.5 + Math.random() * 0.5),
         born: t
       });
-      f.bubbleTimer = 5 + Math.random() * 14;
+      f.bubbleTimer = 1.5 + Math.random() * 3.0;
     }
   }
 
