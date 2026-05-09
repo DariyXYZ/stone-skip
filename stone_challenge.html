@@ -295,7 +295,7 @@ const CURVE_PER_SKIP = 0.04;
 // Units: braille DOTS (2 per char-width, 4 per char-height → each dot ≈ 4px square).
 // Working in dot-space makes fish shape identical at any angle — no char aspect-ratio distortion.
 const FISH_L_D        = 13;    // body length in dots  (~52px)
-const FISH_R_D        = 2.0;   // max body half-width in dots (~8px)
+const FISH_R_D        = 1.5;   // max body half-width in dots (~6px)
 const FISH_A_D        = 1.2;   // undulation amplitude in dots
 const FISH_K_D        = 0.44;  // wave freq in rad/dot  (wavelength ≈ 14 dots ≈ 60px)
 const FISH_HEAD_OFF_D = 4.0;   // nose offset ahead of center in dots
@@ -303,23 +303,23 @@ const TAIL_S          = 0.70;  // normalized body position where tail fork start
 const B_BIT = [[0x01,0x08],[0x02,0x10],[0x04,0x20],[0x40,0x80]];
 let fishBuf = null;
 
-function fishHalfW(sn) {
+function fishHalfW(sn, fR) {
   if (sn <= 0 || sn >= TAIL_S) return 0;
-  return FISH_R_D * Math.sin(Math.PI * Math.pow(sn / TAIL_S, 0.68));
+  return fR * Math.sin(Math.PI * Math.pow(sn / TAIL_S, 0.68));
 }
 
-function inFishPt(sb, u, ph, amp, bend) {
-  const sn = sb / FISH_L_D;
+function inFishPt(sb, u, ph, amp, bend, fL, fR) {
+  const sn = sb / fL;
   if (sn < 0 || sn > 1) return false;
   const wave     = amp * Math.pow(sn, 1.2) * Math.sin(FISH_K_D * sb - ph);
   const bodyBend = bend * Math.pow(sn, 1.5);
   const ur       = u - wave - bodyBend;
   if (sn < TAIL_S) {
-    return Math.abs(ur) < fishHalfW(sn);
+    return Math.abs(ur) < fishHalfW(sn, fR);
   }
   const tn = (sn - TAIL_S) / (1 - TAIL_S);
-  const sp = 0.72 * FISH_R_D * Math.sqrt(tn);
-  const lw = FISH_R_D * (0.24 * (1 - tn) + 0.08);
+  const sp = 0.72 * fR * Math.sqrt(tn);
+  const lw = fR * (0.24 * (1 - tn) + 0.08);
   return Math.abs(ur - sp) < lw || Math.abs(ur + sp) < lw;
 }
 
@@ -408,12 +408,15 @@ function genWaypoints() {
 }
 
 class Fish {
-  constructor() {
+  constructor(baseWps) {
     this.x     = COLS + 3;
     const yLo  = WATER_Y + 2, yHi = ROWS - 2;
     this.y     = (yLo + yHi) / 2 + (Math.random() - 0.5) * (yHi - yLo) * 0.4;
-    this.wps   = genWaypoints();
+    this.wps   = baseWps
+      ? baseWps.map(wp => ({ x: wp.x, y: wp.y + (Math.random() - 0.5) * 3 }))
+      : genWaypoints();
     this.wpIdx = 0;
+    this.sz    = 0.75 + Math.random() * 0.5;
     this.angle = Math.PI;
     this.speed = FISH_SPEED * 0.8 * (0.8 + Math.random() * 0.4);
     this.animPhase = Math.random() * Math.PI * 2;
@@ -435,6 +438,7 @@ let fishBubbles = [];  // { x, y, vy, vx, born }
 let calmTimer       = 0;
 let fishSpawnTimer  = 0;
 let prevStoneFlying = false;
+let shoalWps        = null;
 
 function waveComp(d, px, py, now) {
   const age = now - d.born;
@@ -895,6 +899,7 @@ function updateFish(dt) {
   if (flying && !prevStoneFlying) {
     calmTimer = 0;
     fishSpawnTimer = 0;
+    shoalWps = null;
     fish.forEach(f => {
       f.state = 'fleeing';
       f.angle = f.fleeAngle; // each fish has pre-randomised scatter angle
@@ -909,7 +914,9 @@ function updateFish(dt) {
   if (calmTimer > FISH_CALM_DELAY && fish.length < FISH_MAX) {
     fishSpawnTimer -= dt;
     if (fishSpawnTimer <= 0) {
-      fish.push(new Fish());
+      if (fish.length === 0) shoalWps = null; // new shoal for empty water
+      if (!shoalWps) shoalWps = genWaypoints();
+      fish.push(new Fish(shoalWps));
       fishSpawnTimer = FISH_SPAWN_GAP * (0.7 + Math.random() * 0.6);
     }
   }
@@ -1008,17 +1015,21 @@ function renderFish() {
   fishBuf.fill(0);
 
   for (const f of fish) {
+    const fL = FISH_L_D * f.sz;
+    const fR = FISH_R_D * f.sz;
+    const fA = FISH_A_D * f.sz;
+    const fH = FISH_HEAD_OFF_D * f.sz;
     const ca = Math.cos(f.angle), sa = Math.sin(f.angle);
     const ph = f.animPhase;
     // Body bend in dot units (tail angle lags heading)
     let dba = f.angle - f.tailAngle;
     while (dba >  Math.PI) dba -= 2*Math.PI;
     while (dba < -Math.PI) dba += 2*Math.PI;
-    const bendD = Math.max(-1, Math.min(1, dba)) * 1.2;
+    const bendD = Math.max(-1, Math.min(1, dba)) * 1.2 * f.sz;
     // Conservative bounding box in char coords (/2 covers worst case = horizontal extent)
-    const headExtC = FISH_HEAD_OFF_D / 2 + 1;
-    const bodyExtC = (FISH_L_D - FISH_HEAD_OFF_D) / 2 + 1;
-    const perpExtC = (FISH_R_D + FISH_A_D) / 2 + 1;
+    const headExtC = fH / 2 + 1;
+    const bodyExtC = (fL - fH) / 2 + 1;
+    const perpExtC = (fR + fA) / 2 + 1;
     const hx = f.x + ca * headExtC, hy = f.y + sa * headExtC;
     const tx = f.x - ca * bodyExtC, ty = f.y - sa * bodyExtC;
     const px = -sa * perpExtC,       py =  ca * perpExtC;
@@ -1034,12 +1045,11 @@ function renderFish() {
         for (let row = 0; row < 4; row++) {
           for (let col = 0; col < 2; col++) {
             // Convert char displacement to dot units: ×2 horizontally, ×4 vertically
-            // Each dot ≈ 4px square → geometry is angle-independent
             const dx_d = (cx + col * 0.5 - f.x) * 2;
             const dy_d = (cy + row * 0.25 - f.y) * 4;
-            const sb   = FISH_HEAD_OFF_D - (dx_d * ca + dy_d * sa);
+            const sb   = fH - (dx_d * ca + dy_d * sa);
             const u    = -dx_d * sa + dy_d * ca;
-            if (inFishPt(sb, u, ph, f.swimAmp * FISH_A_D, bendD)) bits |= B_BIT[row][col];
+            if (inFishPt(sb, u, ph, f.swimAmp * fA, bendD, fL, fR)) bits |= B_BIT[row][col];
           }
         }
         if (bits) fishBuf[rowBase + cx] |= bits;
