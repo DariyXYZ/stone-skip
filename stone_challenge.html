@@ -324,9 +324,11 @@ function inFishPt(sb, u, ph, amp, bend, fL, fR) {
 }
 
 // ── fish constants ────────────────────────────────────────────────────
-const FISH_CALM_DELAY  = 4;
-const FISH_SPAWN_GAP   = 3;
-const FISH_MAX         = 5;
+const FISH_CALM_DELAY     = 12;
+const FISH_SPAWN_GAP      = 0.7;
+const FISH_SHOAL_SIZE     = 5;
+const FISH_SHOAL_COOLDOWN = 20;
+const FISH_MAX            = 5;
 const FISH_SPEED       = 18;
 const FISH_FLEE_SPEED  = 40;
 
@@ -387,34 +389,37 @@ let drops = [];
 let winDrop = null;
 
 // ── Fish ──────────────────────────────────────────────────────────────
-function genWaypoints() {
-  const yLo = Math.max(2, Math.floor(ROWS * 0.05));
-  const yHi = Math.min(ROWS - 2, Math.floor(ROWS * 0.82));
-  const r   = yHi - yLo;
-  const mid = (yLo + yHi) / 2;
-  const s   = Math.random() < 0.5 ? 1 : -1;
-  const jit = () => (Math.random() - 0.5) * r * 0.08;
-  const cy  = t => Math.max(yLo + 1, Math.min(yHi - 1, mid + t * r + jit()));
-  return [
-    { x: COLS * 0.82, y: cy( s * 0.42) },
-    { x: COLS * 0.55, y: cy(-s * 0.44) },
-    { x: COLS * 0.30, y: cy( s * 0.42) },
-    { x: COLS * 0.07, y: cy(-s * 0.28) },
-    { x: COLS * 0.30, y: cy( s * 0.32) },
-    { x: COLS * 0.58, y: cy(-s * 0.44) },
-    { x: COLS * 0.84, y: cy( s * 0.42) },
-    { x: COLS + 8,    y: cy( s * 0.10) },
-  ];
+function genShoalPaths() {
+  const yLo  = Math.max(2, Math.floor(ROWS * 0.10));
+  const yHi  = Math.min(ROWS - 2, Math.floor(ROWS * 0.85));
+  const span = yHi - yLo;
+  const cy0  = (yLo + yHi) / 2;
+  const arc  = span * 0.22;
+  const spread = span * 0.38;
+  const cl = y => Math.max(yLo + 1, Math.min(yHi - 1, y));
+  const j  = () => (Math.random() - 0.5) * span * 0.04;
+  return Array.from({ length: 5 }, (_, i) => {
+    const t  = (i / 4) - 0.5;
+    const cy = cy0 + t * spread;
+    return [
+      { x: COLS + 5,    y: cl(cy             + j()) },
+      { x: COLS * 0.82, y: cl(cy - arc * 0.5 + j()) },
+      { x: COLS * 0.58, y: cl(cy - arc       + j()) },
+      { x: COLS * 0.38, y: cl(cy - arc * 0.7 + j()) },
+      { x: COLS * 0.25, y: cl(cy             + j()) },
+      { x: COLS * 0.38, y: cl(cy + arc * 0.7 + j()) },
+      { x: COLS * 0.58, y: cl(cy + arc       + j()) },
+      { x: COLS * 0.82, y: cl(cy + arc * 0.5 + j()) },
+      { x: COLS + 8,    y: cl(cy             + j()) },
+    ];
+  });
 }
 
 class Fish {
-  constructor(baseWps) {
-    this.x     = COLS + 3;
-    const yLo  = WATER_Y + 2, yHi = ROWS - 2;
-    this.y     = (yLo + yHi) / 2 + (Math.random() - 0.5) * (yHi - yLo) * 0.4;
-    this.wps   = baseWps
-      ? baseWps.map(wp => ({ x: wp.x, y: wp.y + (Math.random() - 0.5) * 3 }))
-      : genWaypoints();
+  constructor(path) {
+    this.x     = COLS + 5;
+    this.y     = path[0].y + (Math.random() - 0.5) * 2;
+    this.wps   = path;
     this.wpIdx = 0;
     this.sz    = 0.75 + Math.random() * 0.5;
     this.angle = Math.PI;
@@ -438,7 +443,9 @@ let fishBubbles = [];  // { x, y, vy, vx, born }
 let calmTimer       = 0;
 let fishSpawnTimer  = 0;
 let prevStoneFlying = false;
-let shoalWps        = null;
+let shoalPaths      = null;
+let shoalFishCount  = 0;
+let shoalCooldown   = 0;
 
 function waveComp(d, px, py, now) {
   const age = now - d.born;
@@ -899,7 +906,9 @@ function updateFish(dt) {
   if (flying && !prevStoneFlying) {
     calmTimer = 0;
     fishSpawnTimer = 0;
-    shoalWps = null;
+    shoalPaths = null;
+    shoalFishCount = 0;
+    shoalCooldown  = 0;
     fish.forEach(f => {
       f.state = 'fleeing';
       f.angle = f.fleeAngle; // each fish has pre-randomised scatter angle
@@ -909,15 +918,22 @@ function updateFish(dt) {
   prevStoneFlying = flying;
 
   if (!flying) calmTimer += dt;
+  if (shoalCooldown > 0) shoalCooldown -= dt;
 
-  // Spawn fish after calm threshold
-  if (calmTimer > FISH_CALM_DELAY && fish.length < FISH_MAX) {
-    fishSpawnTimer -= dt;
-    if (fishSpawnTimer <= 0) {
-      if (fish.length === 0) shoalWps = null; // new shoal for empty water
-      if (!shoalWps) shoalWps = genWaypoints();
-      fish.push(new Fish(shoalWps));
-      fishSpawnTimer = FISH_SPAWN_GAP * (0.7 + Math.random() * 0.6);
+  // Spawn a tight shoal of 5, then long pause before next group
+  if (calmTimer > FISH_CALM_DELAY && shoalCooldown <= 0) {
+    if (shoalFishCount < FISH_SHOAL_SIZE && fish.length < FISH_MAX) {
+      fishSpawnTimer -= dt;
+      if (fishSpawnTimer <= 0) {
+        if (shoalFishCount === 0) shoalPaths = genShoalPaths();
+        fish.push(new Fish(shoalPaths[shoalFishCount]));
+        shoalFishCount++;
+        fishSpawnTimer = FISH_SPAWN_GAP;
+      }
+    } else if (shoalFishCount >= FISH_SHOAL_SIZE && fish.length === 0) {
+      shoalFishCount = 0;
+      shoalPaths     = null;
+      shoalCooldown  = FISH_SHOAL_COOLDOWN;
     }
   }
 
