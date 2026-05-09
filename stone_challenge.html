@@ -375,12 +375,13 @@ function initLayout() {
 
 // ── Drop ──────────────────────────────────────────────────────────────
 class Drop {
-  constructor(x, y, born, str = 1, decayD = DECAY_D) {
+  constructor(x, y, born, str = 1, decayD = DECAY_D, splashR = 0.42) {
     this.x = x; this.y = y; this.born = born;
     this.life = 4.5 + Math.random() * 1.5;
-    this.str   = str;
+    this.str    = str;
     this.decayD = decayD;
-    this.seed  = Math.random() * Math.PI * 2;
+    this.splashR = splashR;
+    this.seed   = Math.random() * Math.PI * 2;
   }
 }
 let drops = [];
@@ -458,12 +459,12 @@ function ringChar(dxR, dyR, env, x, y) {
 // vxDamp: applied to VX_DAMP each bounce (>1 = keeps speed better = round; <1 = loses speed = angular)
 // bounceDamp: applied to BOUNCE_DAMP on Y-flip (>1 = bounces higher = round; <1 = dies sooner = angular)
 const STONE_TYPES = [
-  { char: '⬤', hollow: '◯', power: 0.95, vxDamp: 0.88, bounceDamp: 1.08 }, // big heavy round: flies far, high energy loss/skip
-  { char: '●', hollow: '○', power: 1.00, vxDamp: 1.02, bounceDamp: 1.08 }, // small round: best skipper, retains speed well
-  { char: '■', hollow: '□', power: 0.90, vxDamp: 0.84, bounceDamp: 1.00 }, // big heavy block: flies far, sinks fastest
-  { char: '★', hollow: '☆', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88 }, // small angular: medium retention
-  { char: '▲', hollow: '△', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88 }, // small angular: medium retention
-  { char: '◆', hollow: '◇', power: 1.00, vxDamp: 0.98, bounceDamp: 0.88 }, // small flat diamond: decent skipper
+  { char: '⬤', hollow: '◯', power: 0.95, vxDamp: 0.88, bounceDamp: 1.08, splashR: 0.50 }, // big heavy round
+  { char: '●', hollow: '○', power: 1.00, vxDamp: 1.02, bounceDamp: 1.08, splashR: 0.33 }, // small round
+  { char: '■', hollow: '□', power: 0.90, vxDamp: 0.84, bounceDamp: 1.00, splashR: 0.50 }, // big heavy block
+  { char: '★', hollow: '☆', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88, splashR: 0.35 }, // small angular
+  { char: '▲', hollow: '△', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88, splashR: 0.35 }, // small angular
+  { char: '◆', hollow: '◇', power: 1.00, vxDamp: 0.98, bounceDamp: 0.88, splashR: 0.35 }, // small flat diamond
 ];
 // ── Challenge ─────────────────────────────────────────────────────────
 function computeAchievable() {
@@ -500,7 +501,7 @@ const stone = {
   x: 0, y: 0, vx: 0, vy: 0,
   spawnX: 0, spawnY: 0,
   char: '●', hollow: '○',
-  powerMod: 1, vxDampMod: 1, bounceDampMod: 1,
+  powerMod: 1, vxDampMod: 1, bounceDampMod: 1, splashR: 0.33,
   skipN: 0, skipTimer: 0, curveDir: 1,
   sinkT: 0, deadT: 0, flashT: 0,
 };
@@ -512,9 +513,10 @@ function spawnStone() {
   const type = STONE_TYPES[Math.random() * STONE_TYPES.length | 0];
   stone.char         = type.char;
   stone.hollow       = type.hollow;
-  stone.powerMod     = type.power;
-  stone.vxDampMod    = type.vxDamp;
+  stone.powerMod      = type.power;
+  stone.vxDampMod     = type.vxDamp;
   stone.bounceDampMod = type.bounceDamp;
+  stone.splashR       = type.splashR;
   stone.state = 'idle';
   stone.skipN = stone.skipTimer = stone.sinkT = stone.deadT = stone.flashT = 0;
   stone.curveDir = 1;
@@ -668,7 +670,7 @@ function updateStone(dt) {
       if (!challengeWon && stone.skipN === target && spdNext < MIN_SPD) {
         stone.vx = stone.vy = 0;
         stone.state = 'sinking';
-        const sinkDrop = new Drop(stone.x, stone.y, t, 0.9, DECAY_D * 0.65);
+        const sinkDrop = new Drop(stone.x, stone.y, t, 0.9, DECAY_D * 0.65, stone.splashR * 1.2);
         drops.push(sinkDrop);
         playSink();
         challengeWon = true; totalWins++; winDrop = sinkDrop; playWin();
@@ -680,7 +682,7 @@ function updateStone(dt) {
         stone.skipTimer = Math.max(0.07, 0.007 * spdNext);
         stone.flashT    = 0.12;
         const str = Math.max(0.35, 1 - stone.skipN * 0.06);
-        drops.push(new Drop(stone.x, stone.y, t, str, bounceDecayD));
+        drops.push(new Drop(stone.x, stone.y, t, str, bounceDecayD, stone.splashR));
         playSkip(str, stone.skipN - 1);
         if (stone.skipN > bestSkips) bestSkips = stone.skipN;
         updateScore();
@@ -693,7 +695,7 @@ function updateStone(dt) {
         } else if (spdNext < MIN_SPD) {
           stone.vx = stone.vy = 0;
           stone.state = 'sinking';
-          const sinkDrop = new Drop(stone.x, stone.y, t, 0.9, DECAY_D * 0.65);
+          const sinkDrop = new Drop(stone.x, stone.y, t, 0.9, DECAY_D * 0.65, stone.splashR * 1.2);
           drops.push(sinkDrop);
           playSink();
           if (stone.skipN === target && !challengeWon) {
@@ -780,10 +782,11 @@ function renderLayer(el, dropList, crestT = CREST_T) {
           if (age2 < 0 || age2 > 0.35) continue;
           const dx2 = x - d.x, dy2 = (y - d.y) * 2;
           const r2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-          if      (r2 < 0.8 && age2 < 0.09) { ch = '○'; break; }
-          else if (r2 < 1.6 && age2 < 0.18) { ch = '◦'; break; }
-          else if (r2 < 2.8 && age2 < 0.28) { ch = '°'; break; }
-          else if (r2 < 3.5 && age2 < 0.35) { ch = '·'; break; }
+          const sr = d.splashR;
+          if      (r2 < 0.8 * sr && age2 < 0.09) { ch = '○'; break; }
+          else if (r2 < 1.6 * sr && age2 < 0.18) { ch = '◦'; break; }
+          else if (r2 < 2.8 * sr && age2 < 0.28) { ch = '°'; break; }
+          else if (r2 < 3.5 * sr && age2 < 0.35) { ch = '·'; break; }
         }
         row += ch;
       }
