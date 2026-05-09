@@ -387,17 +387,34 @@ let drops = [];
 let winDrop = null;
 
 // ── Fish ──────────────────────────────────────────────────────────────
+function genWaypoints() {
+  const yLo = WATER_Y + 2, yHi = ROWS - 2;
+  const r   = yHi - yLo;
+  const mid = (yLo + yHi) / 2;
+  const s   = Math.random() < 0.5 ? 1 : -1;
+  const jit = () => (Math.random() - 0.5) * r * 0.12;
+  const cy  = t => Math.max(yLo + 1, Math.min(yHi - 1, mid + t * r + jit()));
+  return [
+    { x: COLS * 0.82, y: cy( s * 0.35) },
+    { x: COLS * 0.55, y: cy(-s * 0.38) },
+    { x: COLS * 0.30, y: cy( s * 0.35) },
+    { x: COLS * 0.07, y: cy(-s * 0.20) },
+    { x: COLS * 0.30, y: cy( s * 0.25) },
+    { x: COLS * 0.58, y: cy(-s * 0.38) },
+    { x: COLS * 0.84, y: cy( s * 0.35) },
+    { x: COLS + 8,    y: cy( s * 0.10) },
+  ];
+}
+
 class Fish {
   constructor() {
-    this.x         = COLS + 3;
-    const yLo      = WATER_Y + 1, yHi = ROWS - 2;
-    this.y         = yLo + Math.random() * (yHi - yLo);
-    this.baseAngle = Math.PI;                              // going left
-    this.wavePhase = Math.random() * Math.PI * 2;
-    this.waveAmp   = 0.20 + Math.random() * 0.15;         // ±12-20° vertical tilt
-    this.waveRate  = 0.45 + Math.random() * 0.30;         // oscillation speed (rad/s)
-    this.angle     = Math.PI;
-    this.speed     = FISH_SPEED * (0.8 + Math.random() * 0.4);
+    this.x     = COLS + 3;
+    const yLo  = WATER_Y + 2, yHi = ROWS - 2;
+    this.y     = (yLo + yHi) / 2 + (Math.random() - 0.5) * (yHi - yLo) * 0.4;
+    this.wps   = genWaypoints();
+    this.wpIdx = 0;
+    this.angle = Math.PI;
+    this.speed = FISH_SPEED * 0.8 * (0.8 + Math.random() * 0.4);
     this.animPhase = Math.random() * Math.PI * 2;
     this.animFreq  = 6 + Math.random() * 4;
     this.burstOn   = false;
@@ -920,25 +937,25 @@ function updateFish(dt) {
       }
       f.animPhase += f.animFreq * dt * f.swimAmp;
 
-      // Sinusoidal locomotion: angle = baseAngle + wave, no accumulated rotation
-      f.wavePhase += f.waveRate * dt;
-      f.angle = f.baseAngle + f.waveAmp * Math.sin(f.wavePhase);
+      // Waypoint following: steer toward next waypoint
+      const wp = f.wps[f.wpIdx];
+      if (wp) {
+        const dx = wp.x - f.x, dy = wp.y - f.y;
+        let da = Math.atan2(dy, dx) - f.angle;
+        while (da >  Math.PI) da -= 2 * Math.PI;
+        while (da < -Math.PI) da += 2 * Math.PI;
+        f.angle += Math.sign(da) * Math.min(Math.abs(da), 3.0 * dt);
+        if (Math.sqrt(dx*dx + dy*dy) < 8) {
+          f.wpIdx++;
+          if (f.wpIdx >= f.wps.length) f.state = 'done';
+        }
+      }
 
       // Speed: 0.3× at glide, 1.0× at peak tail beat
       const tailThrust = Math.abs(Math.cos(f.animPhase)) * f.swimAmp;
       const spd = f.speed * (0.3 + 0.7 * tailThrust);
       f.x += Math.cos(f.angle) * spd * dt;
-
-      // Clamp y to water area — no boundary bouncing needed
-      const yLo = WATER_Y + 1, yHi = ROWS - 2;
-      f.y = Math.max(yLo, Math.min(yHi, f.y + Math.sin(f.angle) * spd * dt));
-
-      // X left boundary: flip direction, mirror wave phase
-      if (f.x <= 5 && f.baseAngle > Math.PI / 2) {
-        f.x = 5.1;
-        f.baseAngle = 0;
-        f.wavePhase = -f.wavePhase;
-      }
+      f.y += Math.sin(f.angle) * spd * dt;
 
       // Boids separation — prevents overlap
       for (const g of fish) {
@@ -968,7 +985,7 @@ function updateFish(dt) {
   }
 
   // Remove off-screen fish
-  fish = fish.filter(f => f.x > -6 && f.x < COLS + 10 && f.y > -5 && f.y < ROWS + 5);
+  fish = fish.filter(f => f.state !== 'done' && f.x > -6 && f.x < COLS + 10 && f.y > -5 && f.y < ROWS + 5);
 
   // Update bubbles
   for (const b of fishBubbles) {
