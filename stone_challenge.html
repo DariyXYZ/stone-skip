@@ -328,8 +328,8 @@ function inFishPt(sb, u, ph, amp) {
 const FISH_CALM_DELAY  = 9;     // seconds of calm before first fish
 const FISH_SPAWN_GAP   = 8;     // seconds between subsequent fish
 const FISH_MAX         = 5;
-const FISH_SPEED       = 1.3;
-const FISH_FLEE_SPEED  = 18;
+const FISH_SPEED       = 9;
+const FISH_FLEE_SPEED  = 22;
 
 // ── layout ────────────────────────────────────────────────────────────
 let CW, CH, COLS, ROWS, WATER_Y, blankRow;
@@ -436,15 +436,21 @@ function waveComp(d, px, py, now) {
   return { sv, ev, dx: px - d.x, dy: py - d.y };
 }
 
-function ringChar(dxR, dyR, env) {
+function ringChar(dxR, dyR, env, x, y) {
   let tang = (Math.atan2(-dyR, dxR) * 180 / Math.PI + 360) % 180;
   if (tang > 90) tang = 180 - tang;
-  if (env > 0.44 && Math.random() < 0.02)
+  // Deterministic spatial hash — stable per position, no per-frame flicker
+  const nx = (((x * 127 + y * 311) ^ (x * 53 + y * 19)) & 0xFF) / 255.0;
+  if (env > 0.46 && Math.random() < 0.012)
     return ['°', '˚', '·'][Math.random() * 3 | 0];
-  if (env < 0.13) return '˙';
-  if (env < 0.22) return '·';
-  if (tang < 30)  return env > 0.38 ? '~' : '-';
-  return '·';
+  // Noise-perturbed thresholds give uneven ring width
+  if (env < 0.11 + nx * 0.07) return '˙';
+  if (env < 0.20 + nx * 0.08) return '·';
+  if (tang < 30) {
+    if (env > 0.37 - nx * 0.06) return nx < 0.52 ? '~' : '-';
+    return nx < 0.58 ? '·' : '˙';
+  }
+  return nx < 0.62 ? '·' : '˙';
 }
 
 // ── Stone types ───────────────────────────────────────────────────────
@@ -759,8 +765,10 @@ function renderLayer(el, dropList, crestT = CREST_T) {
         const w = c.sv * c.ev;
         if (w > bW) { bW = w; bDx = c.dx; bDy = c.dy; }
       }
+      // Spatial noise — breaks up perfect-circle uniformity
+      if (bW > 0) bW *= 0.80 + (((x * 127 + y * 311) ^ (x * 53 + y * 19)) & 0xFF) / 255.0 * 0.40;
       if (bW >= FADE_LOW) {
-        row += ringChar(bDx, bDy, bW);
+        row += ringChar(bDx, bDy, bW, x, y);
       } else if (bW >= FADE_ZERO) {
         const p = ((bW - FADE_ZERO) / (FADE_LOW - FADE_ZERO)) ** 3;
         const h = ((x * 374761393 + y * 668265263) & 0x7FFFFFFF) % 1000;
@@ -897,8 +905,8 @@ function updateFish(dt) {
     f.wobble += f.wobbleFreq * dt;
 
     // Burst-coast: occasional swimming strokes, then glide to a stop
-    if (f.state === 'fleeing') {
-      f.swimAmp = 1;
+    if (f.state === 'fleeing' || f.state === 'approaching') {
+      f.swimAmp = 1;  // always fully animated when swimming to a destination
     } else {
       if (f.burstOn) {
         f.burstLeft -= dt;
@@ -918,6 +926,20 @@ function updateFish(dt) {
     }
     // Animation phase only advances while swimming
     f.animPhase += f.animFreq * dt * f.swimAmp;
+
+    // Boids separation — prevents overlap in all non-fleeing states
+    if (f.state !== 'fleeing') {
+      for (const g of fish) {
+        if (g === f) continue;
+        const sdx = f.x - g.x, sdy = f.y - g.y;
+        const sd2 = sdx*sdx + sdy*sdy;
+        if (sd2 < 20 && sd2 > 0.01) {
+          const sep = 3.0 / Math.sqrt(sd2);
+          f.x += sdx * sep * dt;
+          f.y += sdy * sep * dt;
+        }
+      }
+    }
 
     if (f.state === 'fleeing') {
       f.x += Math.cos(f.angle) * FISH_FLEE_SPEED * dt;
@@ -943,18 +965,6 @@ function updateFish(dt) {
       }
 
     } else { // idling
-      // Loose boids separation: nudge away from nearest neighbour
-      for (const g of fish) {
-        if (g === f) continue;
-        const sdx = f.x - g.x, sdy = f.y - g.y;
-        const sd2 = sdx*sdx + sdy*sdy;
-        if (sd2 < 9 && sd2 > 0.01) {
-          const inv = 0.4 / Math.sqrt(sd2);
-          f.x += sdx * inv * dt;
-          f.y += sdy * inv * dt;
-        }
-      }
-
       // Periodic random heading change (more chaotic with time)
       f.turnTimer -= dt;
       if (f.turnTimer <= 0) {
@@ -974,15 +984,16 @@ function updateFish(dt) {
       while (da < -Math.PI) da += 2*Math.PI;
       f.angle += da * Math.min(1, 1.4 * dt);
 
-      // Wander with wobble — speed and wobble scale with burst
+      // Wander with wobble — speed/wobble are zero while coasting (burst-coast gives impulse)
       const perp = f.angle + Math.PI/2;
-      const wob  = Math.sin(f.wobble) * (f.wobbleAmp + chaos * 0.35) * f.swimAmp;
-      const spd  = f.speed * (0.15 + 0.85 * f.swimAmp) * (0.45 + chaos * 0.55);
+      const wob  = Math.sin(f.wobble) * (f.wobbleAmp + chaos * 0.25) * f.swimAmp;
+      const spd  = f.speed * 0.20 * (0.5 + chaos * 0.5) * f.swimAmp;
       f.x += (Math.cos(f.angle) * spd + Math.cos(perp) * wob) * dt;
       f.y += (Math.sin(f.angle) * spd + Math.sin(perp) * wob) * dt;
 
-      // Soft boundary: gently steer back
-      if (f.x < COLS * 0.04) { f.turnAngle = 0;          f.turnTimer = 0.5; }
+      // Soft boundary: gently steer back; fish is shy near left shore
+      if (f.x < COLS * 0.12) { f.turnAngle = 0.3;        f.turnTimer = 1.2; } // shy — turns before getting too close
+      if (f.x < COLS * 0.04) { f.turnAngle = 0.6;        f.turnTimer = 0.5; } // hard nudge
       if (f.x > COLS * 0.62) { f.turnAngle = Math.PI;    f.turnTimer = 0.5; }
       if (f.y < 1)            { f.turnAngle = Math.PI/2;  f.turnTimer = 0.5; }
       if (f.y > ROWS - 2)     { f.turnAngle = -Math.PI/2; f.turnTimer = 0.5; }
@@ -1088,7 +1099,7 @@ let lastFrameTs = null;
 function frame(ts) {
   const realDt = lastFrameTs === null ? DT : Math.min((ts - lastFrameTs) / 1000, 0.1);
   lastFrameTs = ts;
-  t += DT;
+  t += realDt;
   updateStone(realDt);
   drops = drops.filter(d => t - d.born < d.life);
   updateWaveAudio();
