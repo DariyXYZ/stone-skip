@@ -1,4 +1,4 @@
-const CACHE = 'stone-skip-v5';
+const CACHE = 'stone-skip-v6';
 const FILES = [
   './stone_challenge.html',
   './manifest.json',

@@ -301,26 +301,27 @@ const TAIL_S        = 0.70;  // fraction of FISH_L where tail fork starts
 const B_BIT = [[0x01,0x08],[0x02,0x10],[0x04,0x20],[0x40,0x80]];
 let fishBuf = null;           // reusable Int32Array[ROWS*COLS]
 
-function fishHalfW(sn) {
+function fishHalfW(sn, R) {
   // sn ∈ [0, TAIL_S]: 0=nose, TAIL_S=tail junction
   if (sn <= 0 || sn >= TAIL_S) return 0;
   const s = sn / TAIL_S;
-  return FISH_R * Math.sin(Math.PI * Math.pow(s, 0.68));
+  return R * Math.sin(Math.PI * Math.pow(s, 0.68));
 }
 
-function inFishPt(sb, u, ph, amp) {
+function inFishPt(sb, u, ph, amp, bend, R) {
   // sb: distance from nose [0..FISH_L], u: perpendicular offset, ph: anim phase
   const sn = sb / FISH_L;
   if (sn < 0 || sn > 1) return false;
-  const wave = amp * Math.pow(sn, 1.2) * Math.sin(FISH_K * sb - ph); // sn^1.2: whole body bends
-  const ur   = u - wave;
+  const wave     = amp * Math.pow(sn, 1.2) * Math.sin(FISH_K * sb - ph); // sn^1.2: whole body bends
+  const bodyBend = bend * Math.pow(sn, 1.5); // tail lags heading → body curves toward turn
+  const ur       = u - wave - bodyBend;
   if (sn < TAIL_S) {
-    return Math.abs(ur) < fishHalfW(sn);
+    return Math.abs(ur) < fishHalfW(sn, R);
   }
   // Forked tail: two lobes diverge from undulation baseline
   const tn = (sn - TAIL_S) / (1 - TAIL_S);
-  const sp = 0.72 * FISH_R * Math.sqrt(tn);
-  const lw = FISH_R * (0.24 * (1 - tn) + 0.08);
+  const sp = 0.72 * R * Math.sqrt(tn);
+  const lw = R * (0.24 * (1 - tn) + 0.08);
   return Math.abs(ur - sp) < lw || Math.abs(ur + sp) < lw;
 }
 
@@ -412,6 +413,7 @@ class Fish {
     this.turnTimer   = 2 + Math.random() * 3;
     this.turnAngle   = this.angle;
     this.fleeAngle   = (Math.random() - 0.5) * 1.1; // scatter on flee
+    this.tailAngle   = this.angle;                   // lags heading → body bend on turns
   }
 }
 
@@ -907,6 +909,12 @@ function updateFish(dt) {
   for (const f of fish) {
     f.wobble += f.wobbleFreq * dt;
 
+    // Tail angle lags heading — body curves toward turn direction
+    let dta = f.angle - f.tailAngle;
+    while (dta >  Math.PI) dta -= 2*Math.PI;
+    while (dta < -Math.PI) dta += 2*Math.PI;
+    f.tailAngle += dta * Math.min(1, 3.5 * dt);
+
     // Burst-coast: occasional swimming strokes, then glide to a stop
     if (f.state === 'fleeing' || f.state === 'approaching') {
       f.swimAmp = 1;  // always fully animated when swimming to a destination
@@ -960,9 +968,10 @@ function updateFish(dt) {
         while (da < -Math.PI) da += 2*Math.PI;
         f.angle += da * Math.min(1, 2.2 * dt);
         // Sinusoidal lateral wobble (scales with burst)
-        const perp    = f.angle + Math.PI/2;
-        const wob     = Math.sin(f.wobble) * f.wobbleAmp * f.swimAmp;
-        const effSpd  = f.speed * (0.25 + 0.75 * f.swimAmp);
+        const perp       = f.angle + Math.PI/2;
+        const wob        = Math.sin(f.wobble) * f.wobbleAmp * f.swimAmp;
+        const tailThrust = Math.abs(Math.cos(f.animPhase)) * f.swimAmp;
+        const effSpd     = f.speed * (0.25 + 0.75 * f.swimAmp) * (1 + 0.40 * tailThrust);
         f.x += (Math.cos(f.angle) * effSpd + Math.cos(perp) * wob) * dt;
         f.y += (Math.sin(f.angle) * effSpd + Math.sin(perp) * wob) * dt;
       }
@@ -990,7 +999,7 @@ function updateFish(dt) {
       // Wander with wobble — speed/wobble are zero while coasting (burst-coast gives impulse)
       const perp = f.angle + Math.PI/2;
       const wob  = Math.sin(f.wobble) * (f.wobbleAmp + chaos * 0.25) * f.swimAmp;
-      const spd  = f.speed * 0.20 * (0.5 + chaos * 0.5) * f.swimAmp;
+      const spd  = f.speed * 0.20 * (0.5 + chaos * 0.5) * f.swimAmp * (1 + 0.40 * Math.abs(Math.cos(f.animPhase)));
       f.x += (Math.cos(f.angle) * spd + Math.cos(perp) * wob) * dt;
       f.y += (Math.sin(f.angle) * spd + Math.sin(perp) * wob) * dt;
 
@@ -1041,6 +1050,14 @@ function renderFish() {
   for (const f of fish) {
     const ca = Math.cos(f.angle), sa = Math.sin(f.angle);
     const ph = f.animPhase;
+    // Aspect-ratio correction: braille chars ~8.4×16.5px, fish perpendicular width varies by angle
+    const perpPxPerChar = Math.sqrt(sa*sa*CW*CW + ca*ca*CH*CH);
+    const wScale = CH / perpPxPerChar;
+    // Body bend: tail angle lags heading, difference gives curve direction
+    let dba = f.angle - f.tailAngle;
+    while (dba >  Math.PI) dba -= 2*Math.PI;
+    while (dba < -Math.PI) dba += 2*Math.PI;
+    const bendK = Math.max(-1.0, Math.min(1.0, dba)) * 0.55;
     const tailOff = FISH_L - FISH_HEAD_OFF;
     const perpExt = FISH_R + FISH_A + 0.5;
     // Rotated bounding box corners
@@ -1063,7 +1080,7 @@ function renderFish() {
             const dvy = cy + row * 0.25 - f.y;
             const sb  = FISH_HEAD_OFF - (dvx * ca + dvy * sa); // 0=nose → FISH_L
             const u   = -dvx * sa + dvy * ca;                   // perpendicular
-            if (inFishPt(sb, u, ph, f.swimAmp * FISH_A)) bits |= B_BIT[row][col];
+            if (inFishPt(sb, u, ph, f.swimAmp * FISH_A, bendK, FISH_R * wScale)) bits |= B_BIT[row][col];
           }
         }
         if (bits) fishBuf[rowBase + cx] |= bits;
