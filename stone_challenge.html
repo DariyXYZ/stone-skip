@@ -291,6 +291,39 @@ const POWER = 4.2, VX_DAMP = 0.92;
 const MIN_SPD = 1.8, MAX_PULL = 14;
 const CURVE_PER_SKIP = 0.04;
 
+// ── fish braille renderer constants ──────────────────────────────────
+const FISH_L        = 7.5;   // body + tail length in chars
+const FISH_R        = 0.78;  // max body half-width in chars
+const FISH_A        = 0.44;  // undulation amplitude in chars
+const FISH_K        = 0.88;  // wave spatial freq along body (rad/char)
+const FISH_HEAD_OFF = 2.1;   // head offset ahead of fish center
+const TAIL_S        = 0.70;  // fraction of FISH_L where tail fork starts
+const B_BIT = [[0x01,0x08],[0x02,0x10],[0x04,0x20],[0x40,0x80]];
+let fishBuf = null;           // reusable Int32Array[ROWS*COLS]
+
+function fishHalfW(sn) {
+  // sn ∈ [0, TAIL_S]: 0=nose, TAIL_S=tail junction
+  if (sn <= 0 || sn >= TAIL_S) return 0;
+  const s = sn / TAIL_S;
+  return FISH_R * Math.sin(Math.PI * Math.pow(s, 0.68));
+}
+
+function inFishPt(sb, u, ph) {
+  // sb: distance from nose [0..FISH_L], u: perpendicular offset, ph: anim phase
+  const sn = sb / FISH_L;
+  if (sn < 0 || sn > 1) return false;
+  const wave = FISH_A * Math.pow(sn, 1.8) * Math.sin(FISH_K * sb - ph);
+  const ur   = u - wave;
+  if (sn < TAIL_S) {
+    return Math.abs(ur) < fishHalfW(sn);
+  }
+  // Forked tail: two lobes diverge from undulation baseline
+  const tn = (sn - TAIL_S) / (1 - TAIL_S);
+  const sp = 0.72 * FISH_R * Math.sqrt(tn);
+  const lw = FISH_R * (0.24 * (1 - tn) + 0.08);
+  return Math.abs(ur - sp) < lw || Math.abs(ur + sp) < lw;
+}
+
 // ── fish constants ────────────────────────────────────────────────────
 const FISH_CALM_DELAY  = 9;     // seconds of calm before first fish
 const FISH_SPAWN_GAP   = 8;     // seconds between subsequent fish
@@ -362,7 +395,9 @@ class Fish {
     this.speed = FISH_SPEED * (0.75 + Math.random() * 0.5);
     this.wobble = Math.random() * Math.PI * 2;
     this.wobbleFreq = 1.1 + Math.random() * 0.9;
-    this.wobbleAmp  = 0.18 + Math.random() * 0.22;
+    this.wobbleAmp  = 0.10 + Math.random() * 0.14;
+    this.animPhase = Math.random() * Math.PI * 2;
+    this.animFreq  = 15 + Math.random() * 8;    // tail-beat speed (rad/s)
     this.state = 'approaching';
     // target: left zone of screen
     this.targetX = COLS * 0.08 + Math.random() * COLS * 0.38;
@@ -376,6 +411,7 @@ class Fish {
 
 let fish        = [];
 let fishBubbles = [];  // { x, y, vy, vx, born }
+
 let calmTimer       = 0;
 let fishSpawnTimer  = 0;
 let prevStoneFlying = false;
@@ -853,7 +889,8 @@ function updateFish(dt) {
 
   // ── Update each fish ─────────────────────────────────────────────
   for (const f of fish) {
-    f.wobble += f.wobbleFreq * dt;
+    f.wobble    += f.wobbleFreq * dt;
+    f.animPhase += f.animFreq   * dt;
 
     if (f.state === 'fleeing') {
       f.x += Math.cos(f.angle) * FISH_FLEE_SPEED * dt;
@@ -948,43 +985,72 @@ function updateFish(dt) {
   fishBubbles = fishBubbles.filter(b => t - b.born < 3.0);
 }
 
-// ── Fish render ───────────────────────────────────────────────────────
+// ── Fish render (braille dot-matrix) ─────────────────────────────────
 function renderFish() {
   if (fish.length === 0 && fishBubbles.length === 0) {
     $fishLayer.textContent = '';
     return;
   }
 
-  const grid = [];
-  for (let y = 0; y < ROWS; y++) grid.push(new Array(COLS).fill(' '));
+  const total = ROWS * COLS;
+  if (!fishBuf || fishBuf.length !== total) fishBuf = new Int32Array(total);
+  fishBuf.fill(0);
 
-  // Bubbles: ° → ˚ → · as they age
+  for (const f of fish) {
+    const ca = Math.cos(f.angle), sa = Math.sin(f.angle);
+    const ph = f.animPhase;
+    const tailOff = FISH_L - FISH_HEAD_OFF;
+    const perpExt = FISH_R + FISH_A + 0.5;
+    // Rotated bounding box corners
+    const hx = f.x + ca * FISH_HEAD_OFF, hy = f.y + sa * FISH_HEAD_OFF;
+    const tx = f.x - ca * tailOff,        ty = f.y - sa * tailOff;
+    const px = -sa * perpExt,              py =  ca * perpExt;
+    const x0 = Math.max(0,      Math.floor(Math.min(hx+px, hx-px, tx+px, tx-px)));
+    const x1 = Math.min(COLS-1, Math.ceil (Math.max(hx+px, hx-px, tx+px, tx-px)));
+    const y0 = Math.max(0,      Math.floor(Math.min(hy+py, hy-py, ty+py, ty-py)));
+    const y1 = Math.min(ROWS-1, Math.ceil (Math.max(hy+py, hy-py, ty+py, ty-py)));
+
+    for (let cy = y0; cy <= y1; cy++) {
+      const rowBase = cy * COLS;
+      for (let cx = x0; cx <= x1; cx++) {
+        let bits = 0;
+        // Sample 8 braille dot positions within this cell
+        for (let row = 0; row < 4; row++) {
+          for (let col = 0; col < 2; col++) {
+            const dvx = cx + col * 0.5 - f.x;
+            const dvy = cy + row * 0.25 - f.y;
+            const sb  = FISH_HEAD_OFF - (dvx * ca + dvy * sa); // 0=nose → FISH_L
+            const u   = -dvx * sa + dvy * ca;                   // perpendicular
+            if (inFishPt(sb, u, ph)) bits |= B_BIT[row][col];
+          }
+        }
+        if (bits) fishBuf[rowBase + cx] |= bits;
+      }
+    }
+  }
+
+  // Build character grid from braille buffer
+  const rows = [];
+  for (let y = 0; y < ROWS; y++) {
+    const base = y * COLS;
+    const row = new Array(COLS).fill(' ');
+    for (let x = 0; x < COLS; x++) {
+      const b = fishBuf[base + x];
+      if (b) row[x] = String.fromCharCode(0x2800 | b);
+    }
+    rows.push(row);
+  }
+
+  // Overlay bubbles (skip cells already occupied by fish)
   for (const b of fishBubbles) {
     const bx = Math.round(b.x)|0, by = Math.round(b.y)|0;
     if (bx < 0 || bx >= COLS || by < 0 || by >= ROWS) continue;
+    if (fishBuf[by * COLS + bx]) continue;
     const age = t - b.born;
-    grid[by][bx] = age < 1.0 ? '°' : age < 2.0 ? '˚' : '·';
+    rows[by][bx] = age < 1.0 ? '°' : age < 2.0 ? '˚' : '·';
   }
 
-  // Fish: 2-char — moving left: `<·`, moving right: `·>`
-  // When fleeing fast: `<<` or `>>`
-  for (const f of fish) {
-    const fx = Math.round(f.x)|0, fy = Math.round(f.y)|0;
-    if (fy < 0 || fy >= ROWS) continue;
-    const goingLeft = Math.cos(f.angle) <= 0;
-    let c0, c1;
-    if (f.state === 'fleeing') {
-      c0 = goingLeft ? '<' : '>';
-      c1 = goingLeft ? '<' : '>';
-    } else {
-      c0 = goingLeft ? '<' : '·';
-      c1 = goingLeft ? '·' : '>';
-    }
-    if (fx   >= 0 && fx   < COLS) grid[fy][fx]   = c0;
-    if (fx+1 >= 0 && fx+1 < COLS) grid[fy][fx+1] = c1;
-  }
-
-  $fishLayer.textContent = grid.map(r => r.join('')).join('\n');
+  $fishLayer.textContent = rows.map(r => r.join('')).join('\n');
 }
 
 // ── Main loop ─────────────────────────────────────────────────────────
@@ -1018,7 +1084,7 @@ initLayout();
 pickTarget();
 spawnStone();
 updateChallenge();
-window.addEventListener('resize', () => { initLayout(); spawnStone(); drops = []; fish = []; fishBubbles = []; calmTimer = 0; updateChallenge(); });
+window.addEventListener('resize', () => { initLayout(); spawnStone(); drops = []; fish = []; fishBubbles = []; fishBuf = null; calmTimer = 0; updateChallenge(); });
 function startGame() { requestAnimationFrame(frame); }
 
 // ── Splash ────────────────────────────────────────────────────────────
