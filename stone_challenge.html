@@ -324,8 +324,8 @@ function inFishPt(sb, u, ph, amp, bend) {
 }
 
 // ── fish constants ────────────────────────────────────────────────────
-const FISH_CALM_DELAY  = 7;
-const FISH_SPAWN_GAP   = 6;
+const FISH_CALM_DELAY  = 4;
+const FISH_SPAWN_GAP   = 3;
 const FISH_MAX         = 5;
 const FISH_SPEED       = 9;
 const FISH_FLEE_SPEED  = 22;
@@ -389,9 +389,10 @@ let winDrop = null;
 // ── Fish ──────────────────────────────────────────────────────────────
 class Fish {
   constructor() {
-    this.x = COLS + 3;
-    this.y = 2 + Math.random() * (ROWS - 4);
-    this.angle = Math.PI + (Math.random() - 0.5) * 0.6;
+    const fromRight = Math.random() < 0.5;
+    this.x     = fromRight ? COLS + 3 : -3;
+    this.y     = WATER_Y + 1 + Math.random() * (ROWS - WATER_Y - 3);
+    this.angle = fromRight ? Math.PI + (Math.random() - 0.5) * 0.4 : (Math.random() - 0.5) * 0.4;
     this.speed = FISH_SPEED * (0.75 + Math.random() * 0.5);
     this.animPhase = Math.random() * Math.PI * 2;
     this.animFreq  = 6 + Math.random() * 4;
@@ -400,10 +401,10 @@ class Fish {
     this.coastLeft = 1.0 + Math.random() * 2.0;
     this.swimAmp   = 0;
     this.state = 'swimming';
-    this.curveRate  = (Math.random() > 0.5 ? 1 : -1) * (0.08 + Math.random() * 0.12);
-    this.curveTimer = 6.0 + Math.random() * 10.0;
-    this.bubbleTimer = 1.5 + Math.random() * 3.0;
-    this.fleeAngle   = (Math.random() - 0.5) * 1.1;
+    this.curveRate  = (Math.random() > 0.5 ? 1 : -1) * (0.015 + Math.random() * 0.025);
+    this.curveTimer = 8.0 + Math.random() * 12.0;
+    this.bubbleTimer = 0.5 + Math.random() * 1.5;
+    this.fleeAngle   = (Math.random() - 0.5) * Math.PI;
     this.tailAngle   = this.angle;
   }
 }
@@ -917,15 +918,18 @@ function updateFish(dt) {
       }
       f.animPhase += f.animFreq * dt * f.swimAmp;
 
-      // Curved arc locomotion: long gentle arcs — fish traverse the field and drift off
+      // Curved arc locomotion: very gentle arcs — fish traverse the full field
       f.curveTimer -= dt;
       if (f.curveTimer <= 0) {
-        // Keep same turning direction 60% of the time (S-curves), flip 40% (loops/reversal)
+        const curSign = f.curveRate > 0 ? 1 : -1;
         const flip = Math.random() < 0.4;
-        const sign = flip ? -Math.sign(f.curveRate) : Math.sign(f.curveRate);
-        f.curveRate  = sign * (0.08 + Math.random() * 0.12);
-        f.curveTimer = 6.0 + Math.random() * 10.0;
+        f.curveRate  = (flip ? -curSign : curSign) * (0.015 + Math.random() * 0.025);
+        f.curveTimer = 8.0 + Math.random() * 12.0;
       }
+      // Soft y-boundary: flip curve when fish drifts toward water edges
+      const yLo = WATER_Y + 1, yHi = ROWS - 2;
+      if (f.y < yLo + 2 && Math.sin(f.angle) < 0) f.curveRate =  Math.abs(f.curveRate);
+      if (f.y > yHi - 2 && Math.sin(f.angle) > 0) f.curveRate = -Math.abs(f.curveRate);
       f.angle += f.curveRate * dt;
 
       // Speed: 0.3× at glide, 1.0× at peak tail beat
@@ -1055,16 +1059,20 @@ function frame(ts) {
   const realDt = lastFrameTs === null ? DT : Math.min((ts - lastFrameTs) / 1000, 0.1);
   lastFrameTs = ts;
   t += realDt;
-  updateStone(realDt);
-  drops = drops.filter(d => t - d.born < d.life);
-  updateWaveAudio();
-  updateFish(realDt);
-  renderWaves();
-  renderWinRing();
-  renderFish();
-  renderStone();
-  renderBand();
-  updateChallenge();
+  try {
+    updateStone(realDt);
+    drops = drops.filter(d => t - d.born < d.life);
+    updateWaveAudio();
+    updateFish(realDt);
+    renderWaves();
+    renderWinRing();
+    renderFish();
+    renderStone();
+    renderBand();
+    updateChallenge();
+  } catch(e) {
+    console.error('frame error:', e);
+  }
   requestAnimationFrame(frame);
 }
 
