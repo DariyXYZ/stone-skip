@@ -485,7 +485,7 @@ function ringChar(dxR, dyR, env, x, y) {
 // vxDamp: applied to VX_DAMP each bounce (>1 = keeps speed better = round; <1 = loses speed = angular)
 // bounceDamp: applied to BOUNCE_DAMP on Y-flip (>1 = bounces higher = round; <1 = dies sooner = angular)
 const STONE_TYPES = [
-  { char: '⬤', hollow: '◯', power: 0.95, vxDamp: 0.88, bounceDamp: 1.08, splashR: 0.50 }, // big heavy round
+  { char: '⬤', hollow: '◯', power: 0.98, vxDamp: 0.99, bounceDamp: 1.12, splashR: 0.50 }, // big heavy round
   { char: '●', hollow: '○', power: 1.00, vxDamp: 1.02, bounceDamp: 1.08, splashR: 0.33 }, // small round
   { char: '■', hollow: '□', power: 0.90, vxDamp: 0.84, bounceDamp: 1.00, splashR: 0.50 }, // big heavy block
   { char: '★', hollow: '☆', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88, splashR: 0.35 }, // small angular
