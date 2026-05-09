@@ -395,30 +395,31 @@ function genShoalPaths() {
   const span = yHi - yLo;
   const cy0  = (yLo + yHi) / 2;
   const arc  = span * 0.22;
-  const spread = span * 0.38;
+  const spread = span * 0.42;
   const cl = y => Math.max(yLo + 1, Math.min(yHi - 1, y));
-  const j  = () => (Math.random() - 0.5) * span * 0.04;
+  const yj = () => (Math.random() - 0.5) * span * 0.05;
+  const xj = () => (Math.random() - 0.5) * COLS * 0.09;
   return Array.from({ length: 5 }, (_, i) => {
-    const t  = (i / 4) - 0.5;
-    const cy = cy0 + t * spread;
+    const laneT = (i / 4) - 0.5;
+    const cy = cy0 + laneT * spread;
     return [
-      { x: COLS + 5,    y: cl(cy             + j()) },
-      { x: COLS * 0.82, y: cl(cy - arc * 0.5 + j()) },
-      { x: COLS * 0.58, y: cl(cy - arc       + j()) },
-      { x: COLS * 0.38, y: cl(cy - arc * 0.7 + j()) },
-      { x: COLS * 0.25, y: cl(cy             + j()) },
-      { x: COLS * 0.38, y: cl(cy + arc * 0.7 + j()) },
-      { x: COLS * 0.58, y: cl(cy + arc       + j()) },
-      { x: COLS * 0.82, y: cl(cy + arc * 0.5 + j()) },
-      { x: COLS + 8,    y: cl(cy             + j()) },
+      { x: COLS + 5,           y: cl(cy             + yj()) },
+      { x: COLS * 0.82 + xj(), y: cl(cy - arc * 0.5 + yj()) },
+      { x: COLS * 0.58 + xj(), y: cl(cy - arc       + yj()) },
+      { x: COLS * 0.38 + xj(), y: cl(cy - arc * 0.7 + yj()) },
+      { x: COLS * 0.25 + xj(), y: cl(cy             + yj()) },
+      { x: COLS * 0.38 + xj(), y: cl(cy + arc * 0.7 + yj()) },
+      { x: COLS * 0.58 + xj(), y: cl(cy + arc       + yj()) },
+      { x: COLS * 0.82 + xj(), y: cl(cy + arc * 0.5 + yj()) },
+      { x: COLS + 8,           y: cl(cy             + yj()) },
     ];
   });
 }
 
 class Fish {
   constructor(path) {
-    this.x     = COLS + 5;
-    this.y     = path[0].y + (Math.random() - 0.5) * 2;
+    this.x     = COLS + 4 + Math.random() * 10;
+    this.y     = path[0].y + (Math.random() - 0.5) * 6;
     this.wps   = path;
     this.wpIdx = 0;
     this.sz    = 0.75 + Math.random() * 0.5;
@@ -1118,6 +1119,7 @@ function frame(ts) {
     updateChallenge();
   } catch(e) {
     console.error('frame error:', e);
+    if ($fishLayer) $fishLayer.textContent = '';
   }
   requestAnimationFrame(frame);
 }
