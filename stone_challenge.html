@@ -293,8 +293,8 @@ const CURVE_PER_SKIP = 0.04;
 
 // ── fish braille renderer constants ──────────────────────────────────
 const FISH_L        = 7.5;   // body + tail length in chars
-const FISH_R        = 0.78;  // max body half-width in chars
-const FISH_A        = 0.44;  // undulation amplitude in chars
+const FISH_R        = 0.42;  // max body half-width in chars
+const FISH_A        = 0.38;  // undulation amplitude in chars
 const FISH_K        = 0.88;  // wave spatial freq along body (rad/char)
 const FISH_HEAD_OFF = 2.1;   // head offset ahead of fish center
 const TAIL_S        = 0.70;  // fraction of FISH_L where tail fork starts
@@ -308,11 +308,11 @@ function fishHalfW(sn) {
   return FISH_R * Math.sin(Math.PI * Math.pow(s, 0.68));
 }
 
-function inFishPt(sb, u, ph) {
+function inFishPt(sb, u, ph, amp) {
   // sb: distance from nose [0..FISH_L], u: perpendicular offset, ph: anim phase
   const sn = sb / FISH_L;
   if (sn < 0 || sn > 1) return false;
-  const wave = FISH_A * Math.pow(sn, 1.8) * Math.sin(FISH_K * sb - ph);
+  const wave = amp * Math.pow(sn, 1.2) * Math.sin(FISH_K * sb - ph); // sn^1.2: whole body bends
   const ur   = u - wave;
   if (sn < TAIL_S) {
     return Math.abs(ur) < fishHalfW(sn);
@@ -397,7 +397,12 @@ class Fish {
     this.wobbleFreq = 1.1 + Math.random() * 0.9;
     this.wobbleAmp  = 0.10 + Math.random() * 0.14;
     this.animPhase = Math.random() * Math.PI * 2;
-    this.animFreq  = 15 + Math.random() * 8;    // tail-beat speed (rad/s)
+    this.animFreq  = 6 + Math.random() * 4;     // tail-beat speed (rad/s), ~1-1.6 Hz
+    // Burst-coast state
+    this.burstOn   = false;
+    this.burstLeft = 0;
+    this.coastLeft = 1.0 + Math.random() * 2.0; // initial coast delay
+    this.swimAmp   = 0;                          // [0-1] animation + movement scale
     this.state = 'approaching';
     // target: left zone of screen
     this.targetX = COLS * 0.08 + Math.random() * COLS * 0.38;
@@ -889,8 +894,30 @@ function updateFish(dt) {
 
   // ── Update each fish ─────────────────────────────────────────────
   for (const f of fish) {
-    f.wobble    += f.wobbleFreq * dt;
-    f.animPhase += f.animFreq   * dt;
+    f.wobble += f.wobbleFreq * dt;
+
+    // Burst-coast: occasional swimming strokes, then glide to a stop
+    if (f.state === 'fleeing') {
+      f.swimAmp = 1;
+    } else {
+      if (f.burstOn) {
+        f.burstLeft -= dt;
+        f.swimAmp = Math.min(1, f.swimAmp + dt * 4);
+        if (f.burstLeft <= 0) {
+          f.burstOn = false;
+          f.coastLeft = 1.5 + Math.random() * 2.5;
+        }
+      } else {
+        f.coastLeft -= dt;
+        f.swimAmp = Math.max(0, f.swimAmp - dt * 2.5);
+        if (f.coastLeft <= 0) {
+          f.burstOn = true;
+          f.burstLeft = 0.5 + Math.random() * 0.9;
+        }
+      }
+    }
+    // Animation phase only advances while swimming
+    f.animPhase += f.animFreq * dt * f.swimAmp;
 
     if (f.state === 'fleeing') {
       f.x += Math.cos(f.angle) * FISH_FLEE_SPEED * dt;
@@ -907,11 +934,12 @@ function updateFish(dt) {
         while (da >  Math.PI) da -= 2*Math.PI;
         while (da < -Math.PI) da += 2*Math.PI;
         f.angle += da * Math.min(1, 2.2 * dt);
-        // Sinusoidal lateral wobble
-        const perp = f.angle + Math.PI/2;
-        const wob  = Math.sin(f.wobble) * f.wobbleAmp;
-        f.x += (Math.cos(f.angle) * f.speed + Math.cos(perp) * wob) * dt;
-        f.y += (Math.sin(f.angle) * f.speed + Math.sin(perp) * wob) * dt;
+        // Sinusoidal lateral wobble (scales with burst)
+        const perp    = f.angle + Math.PI/2;
+        const wob     = Math.sin(f.wobble) * f.wobbleAmp * f.swimAmp;
+        const effSpd  = f.speed * (0.25 + 0.75 * f.swimAmp);
+        f.x += (Math.cos(f.angle) * effSpd + Math.cos(perp) * wob) * dt;
+        f.y += (Math.sin(f.angle) * effSpd + Math.sin(perp) * wob) * dt;
       }
 
     } else { // idling
@@ -946,10 +974,10 @@ function updateFish(dt) {
       while (da < -Math.PI) da += 2*Math.PI;
       f.angle += da * Math.min(1, 1.4 * dt);
 
-      // Wander with wobble, chaos scales amplitude and speed
+      // Wander with wobble — speed and wobble scale with burst
       const perp = f.angle + Math.PI/2;
-      const wob  = Math.sin(f.wobble) * (f.wobbleAmp + chaos * 0.45);
-      const spd  = f.speed * (0.45 + chaos * 0.55);
+      const wob  = Math.sin(f.wobble) * (f.wobbleAmp + chaos * 0.35) * f.swimAmp;
+      const spd  = f.speed * (0.15 + 0.85 * f.swimAmp) * (0.45 + chaos * 0.55);
       f.x += (Math.cos(f.angle) * spd + Math.cos(perp) * wob) * dt;
       f.y += (Math.sin(f.angle) * spd + Math.sin(perp) * wob) * dt;
 
@@ -1021,7 +1049,7 @@ function renderFish() {
             const dvy = cy + row * 0.25 - f.y;
             const sb  = FISH_HEAD_OFF - (dvx * ca + dvy * sa); // 0=nose → FISH_L
             const u   = -dvx * sa + dvy * ca;                   // perpendicular
-            if (inFishPt(sb, u, ph)) bits |= B_BIT[row][col];
+            if (inFishPt(sb, u, ph, f.swimAmp * FISH_A)) bits |= B_BIT[row][col];
           }
         }
         if (bits) fishBuf[rowBase + cx] |= bits;
