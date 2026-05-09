@@ -389,20 +389,22 @@ let winDrop = null;
 // ── Fish ──────────────────────────────────────────────────────────────
 class Fish {
   constructor() {
-    this.x     = COLS + 3;
-    const yLo  = WATER_Y + 1, yHi = ROWS - 2;
-    this.y     = (yLo + yHi) / 2 + (Math.random() - 0.5) * (yHi - yLo) * 0.5;
-    this.angle = Math.PI + (Math.random() - 0.5) * 0.3;
-    this.speed = FISH_SPEED * (0.8 + Math.random() * 0.4);
+    this.x         = COLS + 3;
+    const yLo      = WATER_Y + 1, yHi = ROWS - 2;
+    this.y         = yLo + Math.random() * (yHi - yLo);
+    this.baseAngle = Math.PI;                              // going left
+    this.wavePhase = Math.random() * Math.PI * 2;
+    this.waveAmp   = 0.20 + Math.random() * 0.15;         // ±12-20° vertical tilt
+    this.waveRate  = 0.45 + Math.random() * 0.30;         // oscillation speed (rad/s)
+    this.angle     = Math.PI;
+    this.speed     = FISH_SPEED * (0.8 + Math.random() * 0.4);
     this.animPhase = Math.random() * Math.PI * 2;
     this.animFreq  = 6 + Math.random() * 4;
     this.burstOn   = false;
     this.burstLeft = 0;
     this.coastLeft = 1.0 + Math.random() * 2.0;
     this.swimAmp   = 0;
-    this.state = 'swimming';
-    this.curveRate  = (Math.random() > 0.5 ? 1 : -1) * (0.08 + Math.random() * 0.06);
-    this.curveTimer = 5.0 + Math.random() * 8.0;
+    this.state     = 'swimming';
     this.bubbleTimer = 0.8 + Math.random() * 1.5;
     this.fleeAngle   = (Math.random() - 0.5) * Math.PI;
     this.tailAngle   = this.angle;
@@ -918,38 +920,25 @@ function updateFish(dt) {
       }
       f.animPhase += f.animFreq * dt * f.swimAmp;
 
-      // Curved arc locomotion: S-curve paths across full screen, exit/enter right
-      f.curveTimer -= dt;
-      if (f.curveTimer <= 0) {
-        const curSign = f.curveRate > 0 ? 1 : -1;
-        const flip = Math.random() < 0.4;
-        f.curveRate  = (flip ? -curSign : curSign) * (0.08 + Math.random() * 0.06);
-        f.curveTimer = 5.0 + Math.random() * 8.0;
-      }
-      // Hard y-boundary: reflect vertical angle component + flip curve direction
-      const yLo = WATER_Y + 1, yHi = ROWS - 2;
-      if (f.y <= yLo && Math.sin(f.angle) < 0) {
-        f.y = yLo + 0.1;
-        f.angle = Math.atan2(-Math.sin(f.angle), Math.cos(f.angle));
-        f.curveRate = -f.curveRate;
-      }
-      if (f.y >= yHi && Math.sin(f.angle) > 0) {
-        f.y = yHi - 0.1;
-        f.angle = Math.atan2(-Math.sin(f.angle), Math.cos(f.angle));
-        f.curveRate = -f.curveRate;
-      }
-      // X left boundary: reflect horizontally — fish traverses full screen, exits right
-      if (f.x <= 5 && Math.cos(f.angle) < 0) {
-        f.x = 5.1;
-        f.angle = Math.PI - f.angle;
-      }
-      f.angle += f.curveRate * dt;
+      // Sinusoidal locomotion: angle = baseAngle + wave, no accumulated rotation
+      f.wavePhase += f.waveRate * dt;
+      f.angle = f.baseAngle + f.waveAmp * Math.sin(f.wavePhase);
 
       // Speed: 0.3× at glide, 1.0× at peak tail beat
       const tailThrust = Math.abs(Math.cos(f.animPhase)) * f.swimAmp;
       const spd = f.speed * (0.3 + 0.7 * tailThrust);
       f.x += Math.cos(f.angle) * spd * dt;
-      f.y += Math.sin(f.angle) * spd * dt;
+
+      // Clamp y to water area — no boundary bouncing needed
+      const yLo = WATER_Y + 1, yHi = ROWS - 2;
+      f.y = Math.max(yLo, Math.min(yHi, f.y + Math.sin(f.angle) * spd * dt));
+
+      // X left boundary: flip direction, mirror wave phase
+      if (f.x <= 5 && f.baseAngle > Math.PI / 2) {
+        f.x = 5.1;
+        f.baseAngle = 0;
+        f.wavePhase = -f.wavePhase;
+      }
 
       // Boids separation — prevents overlap
       for (const g of fish) {
