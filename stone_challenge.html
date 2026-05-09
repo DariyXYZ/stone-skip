@@ -292,36 +292,34 @@ const MIN_SPD = 1.8, MAX_PULL = 14;
 const CURVE_PER_SKIP = 0.04;
 
 // ── fish braille renderer constants ──────────────────────────────────
-const FISH_L        = 7.5;   // body + tail length in chars
-const FISH_R        = 0.42;  // max body half-width in chars
-const FISH_A        = 0.38;  // undulation amplitude in chars
-const FISH_K        = 0.88;  // wave spatial freq along body (rad/char)
-const FISH_HEAD_OFF = 2.1;   // head offset ahead of fish center
-const TAIL_S        = 0.70;  // fraction of FISH_L where tail fork starts
+// Units: braille DOTS (2 per char-width, 4 per char-height → each dot ≈ 4px square).
+// Working in dot-space makes fish shape identical at any angle — no char aspect-ratio distortion.
+const FISH_L_D        = 13;    // body length in dots  (~52px)
+const FISH_R_D        = 2.0;   // max body half-width in dots (~8px)
+const FISH_A_D        = 1.2;   // undulation amplitude in dots
+const FISH_K_D        = 0.44;  // wave freq in rad/dot  (wavelength ≈ 14 dots ≈ 60px)
+const FISH_HEAD_OFF_D = 4.0;   // nose offset ahead of center in dots
+const TAIL_S          = 0.70;  // normalized body position where tail fork starts
 const B_BIT = [[0x01,0x08],[0x02,0x10],[0x04,0x20],[0x40,0x80]];
-let fishBuf = null;           // reusable Int32Array[ROWS*COLS]
+let fishBuf = null;
 
-function fishHalfW(sn, R) {
-  // sn ∈ [0, TAIL_S]: 0=nose, TAIL_S=tail junction
+function fishHalfW(sn) {
   if (sn <= 0 || sn >= TAIL_S) return 0;
-  const s = sn / TAIL_S;
-  return R * Math.sin(Math.PI * Math.pow(s, 0.68));
+  return FISH_R_D * Math.sin(Math.PI * Math.pow(sn / TAIL_S, 0.68));
 }
 
-function inFishPt(sb, u, ph, amp, bend, R) {
-  // sb: distance from nose [0..FISH_L], u: perpendicular offset, ph: anim phase
-  const sn = sb / FISH_L;
+function inFishPt(sb, u, ph, amp, bend) {
+  const sn = sb / FISH_L_D;
   if (sn < 0 || sn > 1) return false;
-  const wave     = amp * Math.pow(sn, 1.2) * Math.sin(FISH_K * sb - ph); // sn^1.2: whole body bends
-  const bodyBend = bend * Math.pow(sn, 1.5); // tail lags heading → body curves toward turn
+  const wave     = amp * Math.pow(sn, 1.2) * Math.sin(FISH_K_D * sb - ph);
+  const bodyBend = bend * Math.pow(sn, 1.5);
   const ur       = u - wave - bodyBend;
   if (sn < TAIL_S) {
-    return Math.abs(ur) < fishHalfW(sn, R);
+    return Math.abs(ur) < fishHalfW(sn);
   }
-  // Forked tail: two lobes diverge from undulation baseline
   const tn = (sn - TAIL_S) / (1 - TAIL_S);
-  const sp = 0.72 * R * Math.sqrt(tn);
-  const lw = R * (0.24 * (1 - tn) + 0.08);
+  const sp = 0.72 * FISH_R_D * Math.sqrt(tn);
+  const lw = FISH_R_D * (0.24 * (1 - tn) + 0.08);
   return Math.abs(ur - sp) < lw || Math.abs(ur + sp) < lw;
 }
 
@@ -402,8 +400,8 @@ class Fish {
     this.coastLeft = 1.0 + Math.random() * 2.0;
     this.swimAmp   = 0;
     this.state = 'swimming';
-    this.curveRate  = (Math.random() - 0.5) * 1.2;  // rad/s arc curvature
-    this.curveTimer = 1.5 + Math.random() * 3.5;
+    this.curveRate  = (Math.random() - 0.5) * 0.28;  // rad/s — wide arcs (~60 char radius)
+    this.curveTimer = 3.0 + Math.random() * 6.0;
     this.bubbleTimer = 5 + Math.random() * 12;
     this.fleeAngle   = (Math.random() - 0.5) * 1.1;
     this.tailAngle   = this.angle;
@@ -919,11 +917,11 @@ function updateFish(dt) {
       }
       f.animPhase += f.animFreq * dt * f.swimAmp;
 
-      // Curved arc locomotion: curvature changes periodically → natural looping paths
+      // Curved arc locomotion: curvature changes periodically → long gentle sweeping arcs
       f.curveTimer -= dt;
       if (f.curveTimer <= 0) {
-        f.curveRate  = (Math.random() - 0.5) * 1.4;
-        f.curveTimer = 1.5 + Math.random() * 3.5;
+        f.curveRate  = (Math.random() - 0.5) * 0.28;
+        f.curveTimer = 3.0 + Math.random() * 6.0;
       }
       f.angle += f.curveRate * dt;
 
@@ -933,19 +931,19 @@ function updateFish(dt) {
       f.x += Math.cos(f.angle) * spd * dt;
       f.y += Math.sin(f.angle) * spd * dt;
 
-      // Boundary: nudge curveRate toward center when fish wanders too far
-      const cx = COLS * 0.28, cy = ROWS * 0.50;
+      // Soft boundary: gently nudge curvature toward center swimming zone
+      const cx = COLS * 0.32, cy = ROWS * 0.50;
       const bdx = f.x - cx, bdy = f.y - cy;
       const bdist = Math.sqrt(bdx * bdx + bdy * bdy);
-      const maxR  = Math.min(COLS, ROWS) * 0.36;
-      if (bdist > maxR * 0.65) {
+      const maxR  = Math.min(COLS, ROWS) * 0.46;
+      if (bdist > maxR * 0.6) {
         const toCenter = Math.atan2(-bdy, -bdx);
         let dca = toCenter - f.angle;
         while (dca >  Math.PI) dca -= 2*Math.PI;
         while (dca < -Math.PI) dca += 2*Math.PI;
-        const urgency = Math.min(1, (bdist - maxR * 0.65) / (maxR * 0.35));
-        f.curveRate += dca * urgency * 2.0 * dt;
-        f.curveRate  = Math.max(-2.5, Math.min(2.5, f.curveRate));
+        const urgency = Math.min(1, (bdist - maxR * 0.6) / (maxR * 0.4));
+        f.curveRate += dca * urgency * 0.8 * dt;
+        f.curveRate  = Math.max(-0.5, Math.min(0.5, f.curveRate));
       }
 
       // Boids separation — prevents overlap
@@ -1000,20 +998,18 @@ function renderFish() {
   for (const f of fish) {
     const ca = Math.cos(f.angle), sa = Math.sin(f.angle);
     const ph = f.animPhase;
-    // Aspect-ratio correction: braille chars ~8.4×16.5px, fish perpendicular width varies by angle
-    const perpPxPerChar = Math.sqrt(sa*sa*CW*CW + ca*ca*CH*CH);
-    const wScale = CH / perpPxPerChar;
-    // Body bend: tail angle lags heading, difference gives curve direction
+    // Body bend in dot units (tail angle lags heading)
     let dba = f.angle - f.tailAngle;
     while (dba >  Math.PI) dba -= 2*Math.PI;
     while (dba < -Math.PI) dba += 2*Math.PI;
-    const bendK = Math.max(-1.0, Math.min(1.0, dba)) * 0.55;
-    const tailOff = FISH_L - FISH_HEAD_OFF;
-    const perpExt = FISH_R + FISH_A + 0.5;
-    // Rotated bounding box corners
-    const hx = f.x + ca * FISH_HEAD_OFF, hy = f.y + sa * FISH_HEAD_OFF;
-    const tx = f.x - ca * tailOff,        ty = f.y - sa * tailOff;
-    const px = -sa * perpExt,              py =  ca * perpExt;
+    const bendD = Math.max(-1, Math.min(1, dba)) * 1.2;
+    // Conservative bounding box in char coords (/2 covers worst case = horizontal extent)
+    const headExtC = FISH_HEAD_OFF_D / 2 + 1;
+    const bodyExtC = (FISH_L_D - FISH_HEAD_OFF_D) / 2 + 1;
+    const perpExtC = (FISH_R_D + FISH_A_D) / 2 + 1;
+    const hx = f.x + ca * headExtC, hy = f.y + sa * headExtC;
+    const tx = f.x - ca * bodyExtC, ty = f.y - sa * bodyExtC;
+    const px = -sa * perpExtC,       py =  ca * perpExtC;
     const x0 = Math.max(0,      Math.floor(Math.min(hx+px, hx-px, tx+px, tx-px)));
     const x1 = Math.min(COLS-1, Math.ceil (Math.max(hx+px, hx-px, tx+px, tx-px)));
     const y0 = Math.max(0,      Math.floor(Math.min(hy+py, hy-py, ty+py, ty-py)));
@@ -1023,14 +1019,15 @@ function renderFish() {
       const rowBase = cy * COLS;
       for (let cx = x0; cx <= x1; cx++) {
         let bits = 0;
-        // Sample 8 braille dot positions within this cell
         for (let row = 0; row < 4; row++) {
           for (let col = 0; col < 2; col++) {
-            const dvx = cx + col * 0.5 - f.x;
-            const dvy = cy + row * 0.25 - f.y;
-            const sb  = FISH_HEAD_OFF - (dvx * ca + dvy * sa); // 0=nose → FISH_L
-            const u   = -dvx * sa + dvy * ca;                   // perpendicular
-            if (inFishPt(sb, u, ph, f.swimAmp * FISH_A, bendK, FISH_R * wScale)) bits |= B_BIT[row][col];
+            // Convert char displacement to dot units: ×2 horizontally, ×4 vertically
+            // Each dot ≈ 4px square → geometry is angle-independent
+            const dx_d = (cx + col * 0.5 - f.x) * 2;
+            const dy_d = (cy + row * 0.25 - f.y) * 4;
+            const sb   = FISH_HEAD_OFF_D - (dx_d * ca + dy_d * sa);
+            const u    = -dx_d * sa + dy_d * ca;
+            if (inFishPt(sb, u, ph, f.swimAmp * FISH_A_D, bendD)) bits |= B_BIT[row][col];
           }
         }
         if (bits) fishBuf[rowBase + cx] |= bits;
