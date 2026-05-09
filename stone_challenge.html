@@ -388,20 +388,21 @@ let winDrop = null;
 
 // ── Fish ──────────────────────────────────────────────────────────────
 function genWaypoints() {
-  const yLo = WATER_Y + 2, yHi = ROWS - 2;
+  const yLo = Math.max(2, Math.floor(ROWS * 0.05));
+  const yHi = Math.min(ROWS - 2, Math.floor(ROWS * 0.82));
   const r   = yHi - yLo;
   const mid = (yLo + yHi) / 2;
   const s   = Math.random() < 0.5 ? 1 : -1;
-  const jit = () => (Math.random() - 0.5) * r * 0.12;
+  const jit = () => (Math.random() - 0.5) * r * 0.08;
   const cy  = t => Math.max(yLo + 1, Math.min(yHi - 1, mid + t * r + jit()));
   return [
-    { x: COLS * 0.82, y: cy( s * 0.35) },
-    { x: COLS * 0.55, y: cy(-s * 0.38) },
-    { x: COLS * 0.30, y: cy( s * 0.35) },
-    { x: COLS * 0.07, y: cy(-s * 0.20) },
-    { x: COLS * 0.30, y: cy( s * 0.25) },
-    { x: COLS * 0.58, y: cy(-s * 0.38) },
-    { x: COLS * 0.84, y: cy( s * 0.35) },
+    { x: COLS * 0.82, y: cy( s * 0.42) },
+    { x: COLS * 0.55, y: cy(-s * 0.44) },
+    { x: COLS * 0.30, y: cy( s * 0.42) },
+    { x: COLS * 0.07, y: cy(-s * 0.28) },
+    { x: COLS * 0.30, y: cy( s * 0.32) },
+    { x: COLS * 0.58, y: cy(-s * 0.44) },
+    { x: COLS * 0.84, y: cy( s * 0.42) },
     { x: COLS + 8,    y: cy( s * 0.10) },
   ];
 }
