@@ -11,7 +11,53 @@
 <meta name="theme-color" content="#000000">
 <style>
 * { margin:0; padding:0; box-sizing:border-box }
-body { background:#000; overflow:hidden; user-select:none; touch-action:none }
+:root {
+  --bg:#000;
+  --waves:#888;
+  --win:#3ec86a;
+  --band:#cc1a1a;
+  --fish:#6688aa;
+  --stone:#d4c9a8;
+  --hint:#333;
+  --score:#2e2e2e;
+  --challenge:#333;
+  --challenge-current:#4a4a4a;
+  --challenge-label:#2a2a2a;
+  --challenge-target:#d8d8d8;
+  --challenge-hit:#4cd97a;
+  --toggle-bg:#080808;
+  --toggle-border:#252525;
+  --toggle-text:#777;
+  --splash-bg:#000;
+  --splash-stage:#aaa;
+  --splash-ring:#666;
+  --splash-title:#fff;
+  --splash-prompt:#333;
+}
+body[data-theme="day"] {
+  --bg:#e7e0cf;
+  --waves:#5f655c;
+  --win:#16783d;
+  --band:#a23a2a;
+  --fish:#3e6477;
+  --stone:#4d4535;
+  --hint:#9b927f;
+  --score:#8c826f;
+  --challenge:#897f6e;
+  --challenge-current:#675f52;
+  --challenge-label:#a79d8a;
+  --challenge-target:#2b2924;
+  --challenge-hit:#1d7d44;
+  --toggle-bg:#d8cfbb;
+  --toggle-border:#b8ad99;
+  --toggle-text:#514b40;
+  --splash-bg:#e7e0cf;
+  --splash-stage:#6a6f66;
+  --splash-ring:#858171;
+  --splash-title:#26231e;
+  --splash-prompt:#9b927f;
+}
+body { background:var(--bg); overflow:hidden; user-select:none; touch-action:none }
 .layer {
   font-family:'Courier New',Courier,monospace;
   font-size:14px;
@@ -20,43 +66,51 @@ body { background:#000; overflow:hidden; user-select:none; touch-action:none }
   position:fixed;
   top:0; left:0;
 }
-#waves      { color:#888; cursor:default }
-#win-ring   { color:#3ec86a; pointer-events:none }
-#band       { color:#cc1a1a; pointer-events:none; visibility:hidden }
-#fish-layer { color:#6688aa; pointer-events:none }
+#waves      { color:var(--waves); cursor:default }
+#win-ring   { color:var(--win); pointer-events:none }
+#band       { color:var(--band); pointer-events:none; visibility:hidden }
+#fish-layer { color:var(--fish); pointer-events:none }
 #stone-el {
   position:fixed;
   font-family:'Courier New',Courier,monospace;
   font-size:14px;
   line-height:1.18;
-  color:#d4c9a8;
+  color:var(--stone);
   pointer-events:none;
 }
 #hint {
   position:fixed; bottom:10px; left:50%;
   transform:translateX(-50%);
-  color:#333; font-family:monospace; font-size:11px;
+  color:var(--hint); font-family:monospace; font-size:11px;
   pointer-events:none; transition:opacity 0.5s;
 }
 #score {
   position:fixed; top:9px; right:16px;
-  color:#2e2e2e; font-family:'Courier New',monospace; font-size:11px;
+  color:var(--score); font-family:'Courier New',monospace; font-size:11px;
   pointer-events:none;
 }
 #challenge {
   position:fixed; top:7px; left:50%; transform:translateX(-50%);
   font-family:'Courier New',monospace; font-size:11px;
-  color:#333; pointer-events:none; white-space:nowrap;
+  color:var(--challenge); pointer-events:none; white-space:nowrap;
 }
-.ch-current { color:#4a4a4a; font-size:14px; }
-.ch-sep     { color:#333; margin:0 5px; }
-.ch-label   { color:#2a2a2a; }
-.ch-target  { color:#d8d8d8; font-size:17px; }
-.ch-hit     { color:#4cd97a; font-size:17px; }
+.ch-current { color:var(--challenge-current); font-size:14px; }
+.ch-sep     { color:var(--challenge); margin:0 5px; }
+.ch-label   { color:var(--challenge-label); }
+.ch-target  { color:var(--challenge-target); font-size:17px; }
+.ch-hit     { color:var(--challenge-hit); font-size:17px; }
+#theme-toggle {
+  position:fixed; top:8px; left:12px; z-index:90;
+  height:24px; min-width:54px; padding:0 8px;
+  border:1px solid var(--toggle-border); border-radius:4px;
+  background:var(--toggle-bg); color:var(--toggle-text);
+  font-family:'Courier New',monospace; font-size:11px;
+  line-height:22px; cursor:pointer;
+}
 
 /* ── Splash overlay ─────────────────────────────────────────────────── */
 #splash {
-  position:fixed; inset:0; z-index:200; background:#000;
+  position:fixed; inset:0; z-index:200; background:var(--splash-bg);
   display:flex; flex-direction:column;
   align-items:center; justify-content:center;
 }
@@ -66,14 +120,14 @@ body { background:#000; overflow:hidden; user-select:none; touch-action:none }
   line-height:1.15; white-space:pre; letter-spacing:0;
   width:220ch; flex-shrink:0;
 }
-#sp-stage { color:#aaa; }
+#sp-stage { color:var(--splash-stage); }
 #sp-stage .spln { display:block; opacity:0; transition:opacity .06s linear; }
 #sp-stage .spln.on { opacity:1; }
-#sp-title { color:#fff; margin-top:.45em; opacity:0; transition:opacity .9s ease; }
+#sp-title { color:var(--splash-title); margin-top:.45em; opacity:0; transition:opacity .9s ease; }
 #sp-title.on { opacity:1; }
 #sp-prompt {
   font-family:'Courier New',monospace;
-  font-size:min(0.7vw,1.1vh); color:#333; letter-spacing:4px;
+  font-size:min(0.7vw,1.1vh); color:var(--splash-prompt); letter-spacing:4px;
   opacity:0; transition:opacity .8s; white-space:nowrap;
   margin-top:.7em; flex-shrink:0;
 }
@@ -91,7 +145,23 @@ body { background:#000; overflow:hidden; user-select:none; touch-action:none }
 <div id="hint">grab stone · pull back · release</div>
 <div id="challenge"></div>
 <div id="score"></div>
+<button id="theme-toggle" type="button" aria-label="switch day or night">night</button>
 <script>
+
+// Theme: real palette switch, not visual inversion.
+const THEME_KEY = 'stone-skip-theme';
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+function setTheme(theme) {
+  const next = theme === 'day' ? 'day' : 'night';
+  document.body.dataset.theme = next;
+  document.getElementById('theme-toggle').textContent = next;
+  if (themeMeta) themeMeta.setAttribute('content', next === 'day' ? '#e7e0cf' : '#000000');
+  try { localStorage.setItem(THEME_KEY, next); } catch {}
+}
+setTheme(localStorage.getItem(THEME_KEY) || 'night');
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  setTheme(document.body.dataset.theme === 'day' ? 'night' : 'day');
+});
 
 // ── sim step: fixed like Python (t += 0.033 per frame) ────────────────
 const DT = 0.033;
@@ -1271,7 +1341,7 @@ document.addEventListener('DOMContentLoaded', function() {
     ringPre.style.cssText =
       'position:fixed;top:0;left:0;z-index:252;pointer-events:none;margin:0;' +
       `font-family:"Courier New",Courier,monospace;font-size:${SP_FONT}px;` +
-      `line-height:${CH_sp}px;white-space:pre;color:#666;background:transparent;`;
+      `line-height:${CH_sp}px;white-space:pre;color:var(--splash-ring);background:transparent;`;
     document.body.appendChild(ringPre);
 
     const spStageLines = Array.from(spSpans).map(el => el.textContent);
