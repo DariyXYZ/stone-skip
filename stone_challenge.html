@@ -130,43 +130,42 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 }
 #shop-modal.open { display:grid }
 #shop-panel {
-  width:min(92vw, 760px);
-  min-height:min(520px, calc(100vh - 24px));
-  max-height:calc(100vh - 24px);
-  overflow:auto;
+  width:min(88vw, 620px);
+  min-height:470px;
+  overflow:hidden;
   display:grid;
-  grid-template-rows:auto 1fr auto;
+  grid-template-rows:1fr auto;
   background:var(--bg);
   color:var(--shop-strong);
 }
-.shop-ornament, .shop-bottom {
-  white-space:pre; text-align:center; color:var(--shop-line);
-  line-height:1.05; pointer-events:none;
-}
 .shop-body {
-  display:grid; grid-template-columns:70px 1fr 70px;
-  align-items:center; gap:14px; min-height:350px;
+  display:grid; grid-template-columns:42px auto 42px;
+  justify-content:center; align-items:center; gap:6px; min-height:300px;
 }
 .shop-arrow {
   justify-self:center; color:var(--shop-line);
-  font-size:30px; line-height:1;
+  font-size:28px; line-height:1;
 }
 #shop-art {
   white-space:pre; justify-self:center; align-self:center;
-  font-size:14px; line-height:1.18; color:var(--shop-strong);
+  font-size:14px; line-height:1.05; color:var(--shop-strong);
   text-shadow:.35px 0 currentColor;
+  text-align:left;
 }
 .shop-copy {
-  width:min(82vw, 520px); justify-self:center; text-align:center;
-  color:var(--shop-strong); line-height:1.35;
+  width:330px; justify-self:center; text-align:left;
+  color:var(--shop-strong); line-height:1.35; padding-bottom:18px;
 }
-#shop-name { font-size:17px; margin-bottom:8px }
-#shop-desc { color:var(--shop-muted); min-height:38px }
-#shop-cost { margin-top:12px; color:var(--shop-line) }
+.shop-head {
+  display:flex; justify-content:space-between; gap:24px;
+  white-space:nowrap; margin-bottom:10px;
+}
+#shop-name, #shop-price { font-size:17px }
+#shop-desc { color:var(--shop-muted); min-height:56px }
 .shop-actions {
-  margin-top:10px; display:flex; justify-content:center; gap:24px;
+  margin-top:18px; display:flex; justify-content:space-between; gap:24px;
 }
-#shop-status { color:var(--shop-muted); min-height:18px; margin-top:8px }
+#shop-status { display:none }
 
 /* ── Splash overlay ─────────────────────────────────────────────────── */
 #splash {
@@ -211,9 +210,6 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 <button id="shop-button" class="ascii-btn" type="button">[ shop ]</button>
 <div id="shop-modal" aria-hidden="true">
   <section id="shop-panel" role="dialog" aria-modal="true" aria-label="stone upgrade shop">
-    <pre class="shop-ornament">      ~~~~~~~\______/~~~~~~~~
-   ~~                 ~~
- ~                       ~</pre>
     <div>
       <div class="shop-body">
         <button id="shop-prev" class="ascii-btn shop-arrow" type="button">&lt;</button>
@@ -221,19 +217,18 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
         <button id="shop-next" class="ascii-btn shop-arrow" type="button">&gt;</button>
       </div>
       <div class="shop-copy">
-        <div id="shop-name"></div>
+        <div class="shop-head">
+          <span id="shop-name"></span>
+          <span id="shop-price"></span>
+        </div>
         <div id="shop-desc"></div>
-        <div id="shop-cost"></div>
         <div class="shop-actions">
           <button id="shop-upgrade" class="ascii-btn" type="button">[ upgrade ]</button>
-          <button id="shop-close" class="ascii-btn" type="button">[ close ]</button>
+          <button id="shop-close" class="ascii-btn" type="button">[ escape ]</button>
         </div>
         <div id="shop-status"></div>
       </div>
     </div>
-    <pre class="shop-bottom"> ~                       ~
-   ~~                 ~~
-      ~~~~~~~/_____\~~~~~~~~</pre>
   </section>
 </div>
 <script>
@@ -507,8 +502,8 @@ const $shopButton = document.getElementById('shop-button');
 const $shopModal  = document.getElementById('shop-modal');
 const $shopArt    = document.getElementById('shop-art');
 const $shopName   = document.getElementById('shop-name');
+const $shopPrice  = document.getElementById('shop-price');
 const $shopDesc   = document.getElementById('shop-desc');
-const $shopCost   = document.getElementById('shop-cost');
 const $shopStatus = document.getElementById('shop-status');
 const $shopUpgrade = document.getElementById('shop-upgrade');
 const $shopPrev   = document.getElementById('shop-prev');
@@ -667,9 +662,9 @@ const STONE_TYPES = [
 
 const SHOP_STONES = [
   {
-    name: 'deep round',
+    name: 'Wide Plop',
     cost: 40,
-    desc: 'Upgrade preview: heavier wake, slower sink, wider final plop.',
+    desc: 'The stone lands with a wider wake. Useful when the last touch needs more presence.',
     art: String.raw`         ~~~~~~~~~·
       ~~·          ~~:
     ~~               ~~:
@@ -687,9 +682,9 @@ const SHOP_STONES = [
          ··\~~~~~~~`
   },
   {
-    name: 'needle round',
+    name: 'Lucky Chance',
     cost: 55,
-    desc: 'Upgrade preview: thinner ripples, cleaner glide, late skip control.',
+    desc: 'One failed landing may correct itself by a single skip when the throw is close.',
     art: String.raw`           ~.
           /  \
         ~/    ˙~
@@ -703,9 +698,9 @@ const SHOP_STONES = [
      ·~~~˙         ~·`
   },
   {
-    name: 'block weight',
+    name: 'Red Bite',
     cost: 70,
-    desc: 'Upgrade preview: punchier first hit, sharp red aim, compact splash.',
+    desc: 'The aim line bites harder into the water and the first impact feels heavier.',
     art: String.raw`       ~~~~\
       ~:   ·~\
     ~/        \
@@ -719,9 +714,9 @@ const SHOP_STONES = [
   · ~~~~~~~~~~~~-`
   },
   {
-    name: 'hook shard',
+    name: 'Hook Turn',
     cost: 90,
-    desc: 'Upgrade preview: angled bite, small bounce loss, curving surface run.',
+    desc: 'A crooked stone that keeps a little sideways pull after each bounce.',
     art: String.raw`         ·~~~˙~-~
        :~˙       ˙·~
       :~            ~
@@ -734,9 +729,9 @@ const SHOP_STONES = [
           :~~~~~~~`
   },
   {
-    name: 'long triangle',
+    name: 'Long Skim',
     cost: 120,
-    desc: 'Upgrade preview: long skim path, narrow wake, risky landing window.',
+    desc: 'Longer surface travel with a narrow wake. Strong, but less forgiving.',
     art: String.raw`     ~-~-~--~-~~~~~~~-
    ~-~ ·           ···~~
   /                    ~|
@@ -754,9 +749,9 @@ const SHOP_STONES = [
     -~~~~~-~~~~~~~~~-~-`
   },
   {
-    name: 'flat diamond',
+    name: 'Flat Run',
     cost: 150,
-    desc: 'Upgrade preview: flat skim, fast water cut, low but stubborn bounce.',
+    desc: 'Low fast skips that hold speed across the water before dropping.',
     art: String.raw`                     ~·~-
                   ·/··   \.
                 ·/         :.
@@ -791,6 +786,7 @@ let target      = 0;
 let challengeWon = false;
 let totalWins   = 0;
 let shopIndex   = 0;
+const shopPurchased = Array(SHOP_STONES.length).fill(false);
 
 function pickTarget() {
   const pool = [...ACHIEVABLE];
@@ -1037,15 +1033,34 @@ function updateScore() {
   if ($shopModal.classList.contains('open')) updateShop();
 }
 
+function formatShopArt(art) {
+  const lines = art.replace(/\r/g, '').split('\n');
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  const minIndent = lines.reduce((min, line) => {
+    if (!line.trim()) return min;
+    const indent = line.match(/^ */)[0].length;
+    return Math.min(min, indent);
+  }, Infinity);
+  const trimmed = lines.map(line => line.slice(Number.isFinite(minIndent) ? minIndent : 0).trimEnd());
+  const width = Math.max(...trimmed.map(line => line.length));
+  const targetW = Math.max(34, width + 2);
+  return trimmed.map(line => {
+    const pad = Math.max(0, targetW - line.length);
+    return ' '.repeat(Math.floor(pad / 2)) + line + ' '.repeat(Math.ceil(pad / 2));
+  }).join('\n');
+}
+
 function updateShop() {
   const item = SHOP_STONES[shopIndex];
   const missing = Math.max(0, item.cost - totalWins);
-  $shopArt.textContent = item.art;
-  $shopName.textContent = `${shopIndex + 1}/6  ${item.name}`;
+  const purchased = shopPurchased[shopIndex];
+  $shopArt.textContent = formatShopArt(item.art);
+  $shopName.textContent = item.name;
+  $shopPrice.textContent = `${item.cost} plops`;
   $shopDesc.textContent = item.desc;
-  $shopCost.textContent = `${item.cost} plops`;
-  $shopUpgrade.textContent = missing ? `[ need ${missing} ]` : '[ upgrade ]';
-  $shopStatus.textContent = `${totalWins} plops`;
+  $shopUpgrade.textContent = purchased ? '[ Purchased ]' : (missing ? `[ Need ${missing} plops ]` : '[ Buy ]');
+  $shopStatus.textContent = '';
 }
 
 function openShop() {
@@ -1070,7 +1085,11 @@ $shopPrev.addEventListener('click', () => shiftShop(-1));
 $shopNext.addEventListener('click', () => shiftShop(1));
 $shopUpgrade.addEventListener('click', () => {
   const item = SHOP_STONES[shopIndex];
-  $shopStatus.textContent = totalWins >= item.cost ? 'upgrade preview only' : `${item.cost - totalWins} plops short`;
+  if (shopPurchased[shopIndex]) return;
+  if (totalWins >= item.cost) {
+    shopPurchased[shopIndex] = true;
+    updateShop();
+  }
 });
 
 document.addEventListener('keydown', e => {
