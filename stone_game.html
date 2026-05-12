@@ -733,52 +733,73 @@ document.addEventListener('DOMContentLoaded', function() {
   function spGo() {
     spPrompt.classList.remove('on');
 
-    const cv  = document.createElement('canvas');
+    // Cover with black canvas immediately — no flash as splash is removed
+    const cv = document.createElement('canvas');
     cv.style.cssText = 'position:fixed;inset:0;z-index:300;pointer-events:none;';
     cv.width  = window.innerWidth;
     cv.height = window.innerHeight;
     document.body.appendChild(cv);
     const ctx = cv.getContext('2d');
     ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    document.getElementById('splash').remove();
+    startGame();
 
-    const SCX = cv.width  / 2, SCY = cv.height / 2;
-    const maxR = Math.sqrt(
-      Math.max(SCX, cv.width  - SCX) ** 2 +
-      Math.max(SCY, cv.height - SCY) ** 2
-    ) + 20;
+    const W = cv.width, H = cv.height;
+    const T0     = performance.now();
+    const SPD    = Math.sqrt(W * H) / 2.2;          // px/sec, viewport-proportional
+    const WOBBLE = Math.min(W, H) * 0.022;          // wobble amplitude
+    const STEPS  = 200;
 
-    const T0  = performance.now();
-    const DUR = 1400;
+    // 8 drops: first two immediate ("first splash"), rest staggered
+    const spDrops = Array.from({ length: 8 }, (_, i) => ({
+      cx:    W * 0.08 + Math.random() * W * 0.84,
+      cy:    H * 0.08 + Math.random() * H * 0.84,
+      born:  i < 2 ? i * 90 : 180 + Math.random() * 480,
+      seed:  Math.random() * Math.PI * 2,
+      speed: SPD * (0.75 + Math.random() * 0.5),
+    }));
 
     function spFrame(ts) {
-      const p  = Math.min((ts - T0) / DUR, 1);
-      const ep = 1 - Math.pow(1 - p, 3);
-      const r  = ep * maxR;
-      const tt = (ts - T0) / 170;
-      const amp = 18 * (1 - ep * 0.6);
+      const elapsed = ts - T0;
 
-      ctx.beginPath();
-      const STEPS = 320;
-      for (let i = 0; i <= STEPS; i++) {
-        const angle = (i / STEPS) * Math.PI * 2;
-        const w = Math.sin(angle * 7 + tt      ) * amp
-                + Math.sin(angle * 3 - tt * 1.4) * amp * 0.35;
-        const rad = Math.max(0, r + w);
-        const x = SCX + Math.cos(angle) * rad;
-        const y = SCY + Math.sin(angle) * rad;
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.fill();
+      // Rebuild solid black each frame
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
 
-      if (p < 1) {
-        requestAnimationFrame(spFrame);
-      } else {
-        ctx.fillRect(0, 0, cv.width, cv.height);
-        document.getElementById('splash').remove();
-        startGame();
-        requestAnimationFrame(() => requestAnimationFrame(() => cv.remove()));
+      // Cut expanding holes — each drop reveals the game underneath
+      ctx.globalCompositeOperation = 'destination-out';
+      for (const d of spDrops) {
+        const age = (elapsed - d.born) / 1000;
+        if (age <= 0) continue;
+        const r   = d.speed * age;
+        const amp = WOBBLE * Math.exp(-r / (Math.sqrt(W * H) * 0.35));
+        const tt  = elapsed / 170;
+        ctx.beginPath();
+        for (let i = 0; i <= STEPS; i++) {
+          const a = (i / STEPS) * Math.PI * 2;
+          const w = Math.sin(a * 7 + d.seed + tt      ) * amp
+                  + Math.sin(a * 3 - tt * 1.4 + d.seed) * amp * 0.35;
+          const rad = Math.max(0, r + w);
+          const x = d.cx + Math.cos(a) * rad;
+          const y = d.cy + Math.sin(a) * rad;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
       }
+
+      // Finished when every screen corner is inside some circle
+      const corners = [[0, 0], [W, 0], [0, H], [W, H]];
+      const done = corners.every(([cx, cy]) =>
+        spDrops.some(d => {
+          const r = d.speed * (elapsed - d.born) / 1000 - WOBBLE;
+          return r > 0 && Math.hypot(cx - d.cx, cy - d.cy) < r;
+        })
+      );
+
+      if (done) { cv.remove(); } else { requestAnimationFrame(spFrame); }
     }
     requestAnimationFrame(spFrame);
   }
