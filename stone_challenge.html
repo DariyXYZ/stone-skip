@@ -28,6 +28,9 @@
   --toggle-bg:#080808;
   --toggle-border:#252525;
   --toggle-text:#777;
+  --shop-strong:#f2f2f2;
+  --shop-muted:#f2f2f2;
+  --shop-line:#d8d8d8;
   --splash-bg:#000;
   --splash-stage:#aaa;
   --splash-ring:#666;
@@ -51,6 +54,9 @@ body[data-theme="day"] {
   --toggle-bg:#ffffff;
   --toggle-border:#c8c8c8;
   --toggle-text:#444;
+  --shop-strong:#111;
+  --shop-muted:#111;
+  --shop-line:#111;
   --splash-bg:#e6e6e6;
   --splash-stage:#555d59;
   --splash-ring:#747474;
@@ -89,7 +95,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   pointer-events:none; transition:opacity 0.5s;
 }
 #score {
-  position:fixed; top:9px; right:16px;
+  position:fixed; top:9px; right:92px;
   color:var(--score); font-family:'Courier New',monospace; font-size:11px;
   pointer-events:none;
 }
@@ -106,13 +112,61 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 .ch-hit     { color:var(--challenge-hit); font-size:17px; }
 #theme-toggle {
   position:fixed; top:8px; left:12px; z-index:90;
-  height:24px; min-width:54px; padding:0 8px;
-  border:1px solid var(--toggle-border); border-radius:4px;
-  background:var(--toggle-bg); color:var(--toggle-text);
-  font-family:'Courier New',monospace; font-size:11px;
-  font-weight:500;
-  line-height:22px; cursor:pointer;
 }
+.ascii-btn {
+  border:0; background:transparent; color:var(--toggle-text);
+  font-family:'Courier New',monospace; font-size:11px; font-weight:500;
+  line-height:1; cursor:pointer; padding:0;
+}
+.ascii-btn:hover { color:var(--shop-strong) }
+#shop-button {
+  position:fixed; top:11px; right:14px; z-index:95;
+}
+#shop-modal {
+  position:fixed; inset:0; z-index:180;
+  display:none; place-items:center;
+  background:transparent; color:var(--shop-strong);
+  font-family:'Courier New',monospace; font-size:14px; font-weight:500;
+}
+#shop-modal.open { display:grid }
+#shop-panel {
+  width:min(92vw, 760px);
+  min-height:min(520px, calc(100vh - 24px));
+  max-height:calc(100vh - 24px);
+  overflow:auto;
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+  background:var(--bg);
+  color:var(--shop-strong);
+}
+.shop-ornament, .shop-bottom {
+  white-space:pre; text-align:center; color:var(--shop-line);
+  line-height:1.05; pointer-events:none;
+}
+.shop-body {
+  display:grid; grid-template-columns:70px 1fr 70px;
+  align-items:center; gap:14px; min-height:350px;
+}
+.shop-arrow {
+  justify-self:center; color:var(--shop-line);
+  font-size:30px; line-height:1;
+}
+#shop-art {
+  white-space:pre; justify-self:center; align-self:center;
+  font-size:14px; line-height:1.18; color:var(--shop-strong);
+  text-shadow:.35px 0 currentColor;
+}
+.shop-copy {
+  width:min(82vw, 520px); justify-self:center; text-align:center;
+  color:var(--shop-strong); line-height:1.35;
+}
+#shop-name { font-size:17px; margin-bottom:8px }
+#shop-desc { color:var(--shop-muted); min-height:38px }
+#shop-cost { margin-top:12px; color:var(--shop-line) }
+.shop-actions {
+  margin-top:10px; display:flex; justify-content:center; gap:24px;
+}
+#shop-status { color:var(--shop-muted); min-height:18px; margin-top:8px }
 
 /* ── Splash overlay ─────────────────────────────────────────────────── */
 #splash {
@@ -153,7 +207,35 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 <div id="hint">grab stone · pull back · release</div>
 <div id="challenge"></div>
 <div id="score"></div>
-<button id="theme-toggle" type="button" aria-label="switch day or night">night</button>
+<button id="theme-toggle" class="ascii-btn" type="button" aria-label="switch day or night">[ night ]</button>
+<button id="shop-button" class="ascii-btn" type="button">[ shop ]</button>
+<div id="shop-modal" aria-hidden="true">
+  <section id="shop-panel" role="dialog" aria-modal="true" aria-label="stone upgrade shop">
+    <pre class="shop-ornament">      ~~~~~~~\______/~~~~~~~~
+   ~~                 ~~
+ ~                       ~</pre>
+    <div>
+      <div class="shop-body">
+        <button id="shop-prev" class="ascii-btn shop-arrow" type="button">&lt;</button>
+        <pre id="shop-art"></pre>
+        <button id="shop-next" class="ascii-btn shop-arrow" type="button">&gt;</button>
+      </div>
+      <div class="shop-copy">
+        <div id="shop-name"></div>
+        <div id="shop-desc"></div>
+        <div id="shop-cost"></div>
+        <div class="shop-actions">
+          <button id="shop-upgrade" class="ascii-btn" type="button">[ upgrade ]</button>
+          <button id="shop-close" class="ascii-btn" type="button">[ close ]</button>
+        </div>
+        <div id="shop-status"></div>
+      </div>
+    </div>
+    <pre class="shop-bottom"> ~                       ~
+   ~~                 ~~
+      ~~~~~~~/_____\~~~~~~~~</pre>
+  </section>
+</div>
 <script>
 
 // Theme: real palette switch, not visual inversion.
@@ -162,7 +244,7 @@ const themeMeta = document.querySelector('meta[name="theme-color"]');
 function setTheme(theme) {
   const next = theme === 'day' ? 'day' : 'night';
   document.body.dataset.theme = next;
-  document.getElementById('theme-toggle').textContent = next;
+  document.getElementById('theme-toggle').textContent = `[ ${next} ]`;
   if (themeMeta) themeMeta.setAttribute('content', next === 'day' ? '#e6e6e6' : '#000000');
   try { localStorage.setItem(THEME_KEY, next); } catch {}
 }
@@ -421,6 +503,17 @@ const $hint      = document.getElementById('hint');
 const $score     = document.getElementById('score');
 const $challenge  = document.getElementById('challenge');
 const $fishLayer  = document.getElementById('fish-layer');
+const $shopButton = document.getElementById('shop-button');
+const $shopModal  = document.getElementById('shop-modal');
+const $shopArt    = document.getElementById('shop-art');
+const $shopName   = document.getElementById('shop-name');
+const $shopDesc   = document.getElementById('shop-desc');
+const $shopCost   = document.getElementById('shop-cost');
+const $shopStatus = document.getElementById('shop-status');
+const $shopUpgrade = document.getElementById('shop-upgrade');
+const $shopPrev   = document.getElementById('shop-prev');
+const $shopNext   = document.getElementById('shop-next');
+const $shopClose  = document.getElementById('shop-close');
 
 function updateChallenge() {
   if (!target) return;
@@ -571,6 +664,113 @@ const STONE_TYPES = [
   { char: '▲', hollow: '△', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88, splashR: 0.35 }, // small angular
   { char: '◆', hollow: '◇', power: 1.00, vxDamp: 0.98, bounceDamp: 0.88, splashR: 0.35 }, // small flat diamond
 ];
+
+const SHOP_STONES = [
+  {
+    name: 'deep round',
+    cost: 40,
+    desc: 'Upgrade preview: heavier wake, slower sink, wider final plop.',
+    art: String.raw`         ~~~~~~~~~·
+      ~~·          ~~:
+    ~~               ~~:
+   ˙                   ~~:
+  ~:                    ~\
+ ::                      \\
+ ::                       :
+ ::                      ::
+ |:                      ::
+ ::~                    ·:|
+ : :~·                 ~~~
+  -·~~:~~           ·~~~/
+    :~~~\~·-~~~~~-~:~/~~
+      :~~~~~\~~~~~~/~
+         ··\~~~~~~~`
+  },
+  {
+    name: 'needle round',
+    cost: 55,
+    desc: 'Upgrade preview: thinner ripples, cleaner glide, late skip control.',
+    art: String.raw`           ~.
+          /  \
+        ~/    ˙~
+   .·~~~·       ˙-~~~.
+   :                 ·
+    ~:             :~
+     ~:\          -~
+      :·           \
+     ::·    ·/\~~   :
+     .:~- ~~:  ~\\~~.
+     ·~~~˙         ~·`
+  },
+  {
+    name: 'block weight',
+    cost: 70,
+    desc: 'Upgrade preview: punchier first hit, sharp red aim, compact splash.',
+    art: String.raw`       ~~~~\
+      ~:   ·~\
+    ~/        \
+   ~:          \
+  ~:            :
+ ~:             ~\
+ :·               :
+/~-               ~/
+~:~~~           /~/~
+ ~~\~~~~~~~~~~~~~~~
+  · ~~~~~~~~~~~~-`
+  },
+  {
+    name: 'hook shard',
+    cost: 90,
+    desc: 'Upgrade preview: angled bite, small bounce loss, curving surface run.',
+    art: String.raw`         ·~~~˙~-~
+       :~˙       ˙·~
+      :~            ~
+      :              ~
+     ::              :
+     |:              :
+      ~\·          /~~
+      -~\~~    /~~~~/
+       :~~~\~~\~~~~:
+          :~~~~~~~`
+  },
+  {
+    name: 'long triangle',
+    cost: 120,
+    desc: 'Upgrade preview: long skim path, narrow wake, risky landing window.',
+    art: String.raw`     ~-~-~--~-~~~~~~~-
+   ~-~ ·           ···~~
+  /                    ~|
+ :·                    ·::
+ ::                      :
+:::                      |
+:::                      :
+:::                      :
+::|                      :
+:::·                    ·:
+\:~:                    ·:
+·|\~:                  ··:
+ :: ~·\··            ··:|:
+ ˙~:~~~~~·-~~·~~~~~~~~·|/˙
+    -~~~~~-~~~~~~~~~-~-`
+  },
+  {
+    name: 'flat diamond',
+    cost: 150,
+    desc: 'Upgrade preview: flat skim, fast water cut, low but stubborn bounce.',
+    art: String.raw`                     ~·~-
+                  ·/··   \.
+                ·/         :.
+               :·            :
+            ·/·               ~:
+            /:                 ~:
+            \|:                ::
+             \~\              /:|
+              \~~\         /:~/·
+                \~~~:  ·:~~-~
+                  \~~~:~~~~
+                    :·|~~`
+  },
+];
 // ── Challenge ─────────────────────────────────────────────────────────
 function computeAchievable() {
   const s = new Set();
@@ -590,6 +790,7 @@ const ACHIEVABLE = computeAchievable();
 let target      = 0;
 let challengeWon = false;
 let totalWins   = 0;
+let shopIndex   = 0;
 
 function pickTarget() {
   const pool = [...ACHIEVABLE];
@@ -832,8 +1033,72 @@ function updateStone(dt) {
 }
 
 function updateScore() {
-  $score.textContent = totalWins > 0 ? `won: ${totalWins}` : '';
+  $score.textContent = `${totalWins} plops`;
+  if ($shopModal.classList.contains('open')) updateShop();
 }
+
+function updateShop() {
+  const item = SHOP_STONES[shopIndex];
+  const missing = Math.max(0, item.cost - totalWins);
+  $shopArt.textContent = item.art;
+  $shopName.textContent = `${shopIndex + 1}/6  ${item.name}`;
+  $shopDesc.textContent = item.desc;
+  $shopCost.textContent = `${item.cost} plops`;
+  $shopUpgrade.textContent = missing ? `[ need ${missing} ]` : '[ upgrade ]';
+  $shopStatus.textContent = `${totalWins} plops`;
+}
+
+function openShop() {
+  updateShop();
+  $shopModal.classList.add('open');
+  $shopModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeShop() {
+  $shopModal.classList.remove('open');
+  $shopModal.setAttribute('aria-hidden', 'true');
+}
+
+function shiftShop(dir) {
+  shopIndex = (shopIndex + dir + SHOP_STONES.length) % SHOP_STONES.length;
+  updateShop();
+}
+
+$shopButton.addEventListener('click', openShop);
+$shopClose.addEventListener('click', closeShop);
+$shopPrev.addEventListener('click', () => shiftShop(-1));
+$shopNext.addEventListener('click', () => shiftShop(1));
+$shopUpgrade.addEventListener('click', () => {
+  const item = SHOP_STONES[shopIndex];
+  $shopStatus.textContent = totalWins >= item.cost ? 'upgrade preview only' : `${item.cost - totalWins} plops short`;
+});
+
+document.addEventListener('keydown', e => {
+  const shopOpen = $shopModal.classList.contains('open');
+  const splashOpen = !!document.getElementById('splash');
+  if (e.key === 'Escape' && shopOpen) {
+    e.preventDefault();
+    closeShop();
+    return;
+  }
+  if (splashOpen) return;
+  if (e.key.toLowerCase() === 's' && !shopOpen) {
+    e.preventDefault();
+    openShop();
+    return;
+  }
+  if (!shopOpen) return;
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    shiftShop(-1);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    shiftShop(1);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    $shopUpgrade.click();
+  }
+});
 
 // ── Stone char ────────────────────────────────────────────────────────
 function stoneChar() {
@@ -1236,6 +1501,7 @@ if ('serviceWorker' in navigator) {
 initLayout();
 pickTarget();
 spawnStone();
+updateScore();
 updateChallenge();
 window.addEventListener('resize', () => { initLayout(); spawnStone(); drops = []; fish = []; fishBubbles = []; fishBuf = null; calmTimer = 0; updateChallenge(); });
 function startGame() { requestAnimationFrame(frame); }

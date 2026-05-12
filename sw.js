@@ -1,4 +1,4 @@
-const CACHE = 'stone-skip-v24';
+const CACHE = 'stone-skip-v25';
 const FILES = [
   './',
   './index.html',
