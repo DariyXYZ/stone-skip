@@ -1,4 +1,4 @@
-const CACHE = 'stone-skipping-game-v52';
+const CACHE = 'stone-skipping-game-v53';
 const FILES = [
   './',
   './index.html',

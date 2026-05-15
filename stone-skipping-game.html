@@ -193,16 +193,27 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 .shop-copy {
   width:400px; max-width:100%; text-align:left;
   color:var(--shop-strong); line-height:1.35;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  column-gap:24px;
 }
 .shop-head {
-  display:flex; justify-content:space-between; gap:24px;
+  display:contents;
   white-space:nowrap; margin-bottom:10px;
 }
 #shop-name, #shop-price { font-size:17px }
-#shop-desc { color:var(--shop-muted); min-height:56px; white-space:normal; overflow-wrap:break-word }
-.shop-actions {
-  margin-top:28px; display:flex; justify-content:space-between; gap:24px; white-space:nowrap;
+#shop-name { grid-column:1; grid-row:1; margin-bottom:10px }
+#shop-price { grid-column:2; grid-row:1; justify-self:end; margin-bottom:10px }
+#shop-desc {
+  grid-column:1 / -1; grid-row:2;
+  color:var(--shop-muted); min-height:56px; white-space:normal; overflow-wrap:break-word
 }
+.shop-actions {
+  grid-column:1 / -1; grid-row:3;
+  margin-top:28px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:24px; white-space:nowrap;
+}
+#shop-upgrade { justify-self:start }
+#shop-close { justify-self:end }
 #shop-status { display:none }
 
 /* ── Splash overlay ─────────────────────────────────────────────────── */

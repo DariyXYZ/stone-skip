@@ -172,12 +172,18 @@ pre {
   color:#f2f2f2;
 }
 .shop-content pre { overflow:hidden; max-width:100%; min-width:0 }
-.shop-meta { width:400px; max-width:100%; display:grid; gap:10px }
-.shop-head { display:flex; justify-content:space-between; gap:24px; white-space:nowrap }
+.shop-meta {
+  width:400px; max-width:100%; display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  column-gap:24px;
+}
+.shop-head { display:contents; white-space:nowrap }
 .shop-title, .shop-price, .shop-desc, .shop-actions { text-align:left }
-.shop-desc { white-space:pre-wrap; line-height:1.25; color:#d0d0d0 }
+.shop-title { grid-column:1; grid-row:1; margin-bottom:10px }
+.shop-price { grid-column:2; grid-row:1; justify-self:end; margin-bottom:10px }
+.shop-desc { grid-column:1 / -1; grid-row:2; white-space:pre-wrap; line-height:1.25; color:#d0d0d0 }
 .shop-art { justify-self:center; align-self:center; width:44ch }
-.shop-actions { display:flex; justify-content:space-between; margin-top:10px }
+.shop-actions { grid-column:1 / -1; grid-row:3; display:flex; justify-content:space-between; margin-top:18px }
 iframe { display:none }
 @media (max-width:900px) {
   .app { grid-template-columns:1fr; padding:8px }
