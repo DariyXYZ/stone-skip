@@ -180,6 +180,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   white-space:pre;
   font-size:14px; line-height:1.05; color:var(--shop-strong);
   text-shadow:.35px 0 currentColor;
+  width:44ch;
   min-height:170px;
   display:block;
 }
@@ -1291,10 +1292,32 @@ function formatShopArt(art) {
     return Math.min(min, indent);
   }, Infinity);
   const trimmed = lines.map(line => line.slice(Number.isFinite(minIndent) ? minIndent : 0).trimEnd());
-  const width = Math.max(...trimmed.map(line => line.length));
-  const targetW = Math.max(34, width + 2);
-  const blockPad = Math.max(0, Math.floor((targetW - width) / 2));
-  return trimmed.map(line => ' '.repeat(blockPad) + line.padEnd(width, ' ')).join('\n');
+  const rawWidth = Math.max(...trimmed.map(line => line.length), 1);
+  let inkLeft = Infinity;
+  let inkRight = -Infinity;
+  trimmed.forEach(line => {
+    for (let x = 0; x < line.length; x++) {
+      if (line[x] === ' ') continue;
+      inkLeft = Math.min(inkLeft, x);
+      inkRight = Math.max(inkRight, x);
+    }
+  });
+  if (!Number.isFinite(inkLeft)) return '';
+
+  const targetW = Math.max(44, rawWidth + 2);
+  const inkCenter = (inkLeft + inkRight + 1) / 2;
+  const targetCenter = targetW / 2;
+  const shift = Math.round(targetCenter - inkCenter);
+  const outWidth = Math.max(targetW, rawWidth + Math.max(0, shift));
+
+  return trimmed.map(line => {
+    const row = Array(outWidth).fill(' ');
+    for (let x = 0; x < line.length; x++) {
+      const nx = x + shift;
+      if (nx >= 0 && nx < outWidth) row[nx] = line[x];
+    }
+    return row.join('').slice(0, targetW).padEnd(targetW, ' ');
+  }).join('\n');
 }
 
 function renderShopFrame() {
