@@ -173,8 +173,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   font-size:14px; line-height:1.05; color:var(--shop-strong);
   text-shadow:.35px 0 currentColor;
   min-height:170px;
-  display:flex;
-  align-items:center;
+  display:block;
 }
 .shop-copy {
   width:380px; max-width:100%; text-align:left;
@@ -1277,6 +1276,7 @@ function formatShopArt(art) {
   const lines = art.replace(/\r/g, '').split('\n');
   while (lines.length && !lines[0].trim()) lines.shift();
   while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  if (!lines.length) return '';
   const minIndent = lines.reduce((min, line) => {
     if (!line.trim()) return min;
     const indent = line.match(/^ */)[0].length;
@@ -1285,10 +1285,8 @@ function formatShopArt(art) {
   const trimmed = lines.map(line => line.slice(Number.isFinite(minIndent) ? minIndent : 0).trimEnd());
   const width = Math.max(...trimmed.map(line => line.length));
   const targetW = Math.max(34, width + 2);
-  return trimmed.map(line => {
-    const pad = Math.max(0, targetW - line.length);
-    return ' '.repeat(Math.floor(pad / 2)) + line + ' '.repeat(Math.ceil(pad / 2));
-  }).join('\n');
+  const blockPad = Math.max(0, Math.floor((targetW - width) / 2));
+  return trimmed.map(line => ' '.repeat(blockPad) + line.padEnd(width, ' ')).join('\n');
 }
 
 function renderShopFrame() {
