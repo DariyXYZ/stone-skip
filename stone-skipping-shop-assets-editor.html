@@ -162,17 +162,22 @@ pre {
 .shop-frame > pre:first-child { color:#dadada }
 .shop-content {
   position:absolute;
-  inset:28px 24px;
+  inset:54px 40px 48px;
   overflow:hidden;
   display:grid;
-  grid-template-rows:auto auto 1fr auto auto;
-  gap:8px;
+  grid-template-rows:190px auto;
+  align-content:center;
+  justify-items:center;
+  gap:34px;
   color:#f2f2f2;
 }
 .shop-content pre { overflow:hidden; max-width:100%; min-width:0 }
-.shop-title, .shop-price, .shop-desc, .shop-actions { text-align:center }
+.shop-meta { width:400px; max-width:100%; display:grid; gap:10px }
+.shop-head { display:flex; justify-content:space-between; gap:24px; white-space:nowrap }
+.shop-title, .shop-price, .shop-desc, .shop-actions { text-align:left }
 .shop-desc { white-space:pre-wrap; line-height:1.25; color:#d0d0d0 }
-.shop-art { justify-self:center; align-self:center }
+.shop-art { justify-self:center; align-self:center; width:44ch }
+.shop-actions { display:flex; justify-content:space-between; margin-top:10px }
 iframe { display:none }
 @media (max-width:900px) {
   .app { grid-template-columns:1fr; padding:8px }
@@ -181,7 +186,7 @@ iframe { display:none }
 </style>
 </head>
 <body>
-<iframe id="game-frame" src="stone-skipping-game.html?asset-editor=1&v=source-cover-2026-05-15" title="Stone Skipping Game asset source"></iframe>
+<iframe id="game-frame" src="stone-skipping-game.html?asset-editor=1&v=asset-editor-v2" title="Stone Skipping Game asset source"></iframe>
 
 <main class="app">
   <aside class="rail">
@@ -289,11 +294,15 @@ iframe { display:none }
     <div class="shop-frame">
       <pre id="frame-preview"></pre>
       <div class="shop-content">
-        <pre id="preview-title" class="shop-title"></pre>
-        <pre id="preview-price" class="shop-price"></pre>
         <pre id="preview-art" class="shop-art"></pre>
-        <pre id="preview-desc" class="shop-desc"></pre>
-        <pre id="preview-actions" class="shop-actions"></pre>
+        <div class="shop-meta">
+          <div class="shop-head">
+            <pre id="preview-title" class="shop-title"></pre>
+            <pre id="preview-price" class="shop-price"></pre>
+          </div>
+          <pre id="preview-desc" class="shop-desc"></pre>
+          <pre id="preview-actions" class="shop-actions"></pre>
+        </div>
       </div>
     </div>
   </div>
@@ -411,17 +420,35 @@ function drawFrame(frame, cols, rows) {
 
 function gameFormatShopArt(art) {
   const lines = art.replace(/\r/g, '').split('\n');
-  let minIndent = Infinity;
-  lines.forEach(line => {
-    if (!line.trim()) return;
-    minIndent = Math.min(minIndent, line.match(/^\s*/)[0].length);
-  });
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  if (!lines.length) return '';
+  const minIndent = lines.reduce((min, line) => {
+    if (!line.trim()) return min;
+    return Math.min(min, line.match(/^ */)[0].length);
+  }, Infinity);
   const trimmed = lines.map(line => line.slice(Number.isFinite(minIndent) ? minIndent : 0).trimEnd());
-  const width = Math.max(...trimmed.map(line => line.length), 0);
-  const targetW = Math.max(34, width + 2);
+  const rawWidth = Math.max(...trimmed.map(line => line.length), 1);
+  let inkLeft = Infinity;
+  let inkRight = -Infinity;
+  trimmed.forEach(line => {
+    for (let x = 0; x < line.length; x++) {
+      if (line[x] === ' ') continue;
+      inkLeft = Math.min(inkLeft, x);
+      inkRight = Math.max(inkRight, x);
+    }
+  });
+  if (!Number.isFinite(inkLeft)) return '';
+  const targetW = Math.max(44, rawWidth + 2);
+  const shift = Math.round(targetW / 2 - (inkLeft + inkRight + 1) / 2);
+  const outWidth = Math.max(targetW, rawWidth + Math.max(0, shift));
   return trimmed.map(line => {
-    const pad = Math.max(0, targetW - line.length);
-    return ' '.repeat(Math.floor(pad / 2)) + line + ' '.repeat(Math.ceil(pad / 2));
+    const row = Array(outWidth).fill(' ');
+    for (let x = 0; x < line.length; x++) {
+      const nx = x + shift;
+      if (nx >= 0 && nx < outWidth) row[nx] = line[x];
+    }
+    return row.join('').slice(0, targetW).padEnd(targetW, ' ');
   }).join('\n');
 }
 

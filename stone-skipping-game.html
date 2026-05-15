@@ -152,7 +152,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   height:100%;
   display:grid;
   place-items:center;
-  padding:54px 56px 48px;
+  padding:58px 56px 52px;
 }
 .shop-body {
   position:relative;
@@ -162,14 +162,18 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   place-items:center;
 }
 .shop-center {
-  display:flex; flex-direction:column;
-  align-items:center; justify-content:center; gap:34px;
+  display:grid;
+  grid-template-rows:210px auto;
+  align-content:center;
+  justify-items:center;
+  row-gap:38px;
   width:min(100%, 430px);
+  height:100%;
   min-width:0;
 }
 .shop-arrow {
   position:absolute;
-  top:50%;
+  top:42%;
   transform:translateY(-50%);
   color:var(--shop-line);
   font-size:28px; line-height:1;
@@ -181,11 +185,13 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   font-size:14px; line-height:1.05; color:var(--shop-strong);
   text-shadow:.35px 0 currentColor;
   width:44ch;
-  min-height:170px;
+  min-height:0;
   display:block;
+  align-self:center;
+  justify-self:center;
 }
 .shop-copy {
-  width:380px; max-width:100%; text-align:left;
+  width:400px; max-width:100%; text-align:left;
   color:var(--shop-strong); line-height:1.35;
 }
 .shop-head {
@@ -195,7 +201,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 #shop-name, #shop-price { font-size:17px }
 #shop-desc { color:var(--shop-muted); min-height:56px; white-space:normal; overflow-wrap:break-word }
 .shop-actions {
-  margin-top:24px; display:flex; justify-content:space-between; gap:24px; white-space:nowrap;
+  margin-top:28px; display:flex; justify-content:space-between; gap:24px; white-space:nowrap;
 }
 #shop-status { display:none }
 
