@@ -162,10 +162,10 @@ pre {
 .shop-frame > pre:first-child { color:#dadada }
 .shop-content {
   position:absolute;
-  inset:54px 40px 48px;
+  inset:54px 40px 76px;
   overflow:hidden;
   display:grid;
-  grid-template-rows:190px auto;
+  grid-template-rows:calc(14 * 1.05em) auto;
   align-content:center;
   justify-items:center;
   gap:34px;
@@ -437,25 +437,33 @@ function gameFormatShopArt(art) {
   const rawWidth = Math.max(...trimmed.map(line => line.length), 1);
   let inkLeft = Infinity;
   let inkRight = -Infinity;
-  trimmed.forEach(line => {
+  let inkTop = Infinity;
+  let inkBottom = -Infinity;
+  trimmed.forEach((line, y) => {
     for (let x = 0; x < line.length; x++) {
       if (line[x] === ' ') continue;
       inkLeft = Math.min(inkLeft, x);
       inkRight = Math.max(inkRight, x);
+      inkTop = Math.min(inkTop, y);
+      inkBottom = Math.max(inkBottom, y);
     }
   });
   if (!Number.isFinite(inkLeft)) return '';
   const targetW = Math.max(44, rawWidth + 2);
+  const targetH = Math.max(14, trimmed.length);
   const shift = Math.round(targetW / 2 - (inkLeft + inkRight + 1) / 2);
+  const rowShift = Math.round(targetH / 2 - (inkTop + inkBottom + 1) / 2);
   const outWidth = Math.max(targetW, rawWidth + Math.max(0, shift));
-  return trimmed.map(line => {
-    const row = Array(outWidth).fill(' ');
+  const out = Array.from({ length: targetH }, () => Array(outWidth).fill(' '));
+  trimmed.forEach((line, y) => {
+    const ny = y + rowShift;
+    if (ny < 0 || ny >= targetH) return;
     for (let x = 0; x < line.length; x++) {
       const nx = x + shift;
-      if (nx >= 0 && nx < outWidth) row[nx] = line[x];
+      if (nx >= 0 && nx < outWidth) out[ny][nx] = line[x];
     }
-    return row.join('').slice(0, targetW).padEnd(targetW, ' ');
-  }).join('\n');
+  });
+  return out.map(row => row.join('').slice(0, targetW).padEnd(targetW, ' ')).join('\n');
 }
 
 function defaultShopFrameRaster() {

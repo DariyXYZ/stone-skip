@@ -36,6 +36,7 @@
   --splash-ring:#666;
   --splash-title:#fff;
   --splash-prompt:#333;
+  --shop-art-rows:14;
 }
 body[data-theme="day"] {
   --bg:#e6e6e6;
@@ -152,7 +153,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   height:100%;
   display:grid;
   place-items:center;
-  padding:58px 56px 52px;
+  padding:58px 56px 76px;
 }
 .shop-body {
   position:relative;
@@ -163,7 +164,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 }
 .shop-center {
   display:grid;
-  grid-template-rows:210px auto;
+  grid-template-rows:calc(var(--shop-art-rows) * 1.05em) auto;
   align-content:center;
   justify-items:center;
   row-gap:38px;
@@ -174,7 +175,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 }
 .shop-arrow {
   position:absolute;
-  top:42%;
+  top:calc((100% - 76px - 58px) / 2 + 58px);
   transform:translateY(-50%);
   color:var(--shop-line);
   font-size:28px; line-height:1;
@@ -1313,29 +1314,40 @@ function formatShopArt(art) {
   const rawWidth = Math.max(...trimmed.map(line => line.length), 1);
   let inkLeft = Infinity;
   let inkRight = -Infinity;
-  trimmed.forEach(line => {
+  let inkTop = Infinity;
+  let inkBottom = -Infinity;
+  trimmed.forEach((line, y) => {
     for (let x = 0; x < line.length; x++) {
       if (line[x] === ' ') continue;
       inkLeft = Math.min(inkLeft, x);
       inkRight = Math.max(inkRight, x);
+      inkTop = Math.min(inkTop, y);
+      inkBottom = Math.max(inkBottom, y);
     }
   });
   if (!Number.isFinite(inkLeft)) return '';
 
   const targetW = Math.max(44, rawWidth + 2);
+  const targetH = Math.max(14, trimmed.length);
   const inkCenter = (inkLeft + inkRight + 1) / 2;
+  const inkMiddle = (inkTop + inkBottom + 1) / 2;
   const targetCenter = targetW / 2;
+  const targetMiddle = targetH / 2;
   const shift = Math.round(targetCenter - inkCenter);
+  const rowShift = Math.round(targetMiddle - inkMiddle);
   const outWidth = Math.max(targetW, rawWidth + Math.max(0, shift));
+  const out = Array.from({ length: targetH }, () => Array(outWidth).fill(' '));
 
-  return trimmed.map(line => {
-    const row = Array(outWidth).fill(' ');
+  trimmed.forEach((line, y) => {
+    const ny = y + rowShift;
+    if (ny < 0 || ny >= targetH) return;
     for (let x = 0; x < line.length; x++) {
       const nx = x + shift;
-      if (nx >= 0 && nx < outWidth) row[nx] = line[x];
+      if (nx >= 0 && nx < outWidth) out[ny][nx] = line[x];
     }
-    return row.join('').slice(0, targetW).padEnd(targetW, ' ');
-  }).join('\n');
+  });
+
+  return out.map(row => row.join('').slice(0, targetW).padEnd(targetW, ' ')).join('\n');
 }
 
 function renderShopFrame() {
