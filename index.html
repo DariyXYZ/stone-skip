@@ -9,7 +9,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#000000">
-<meta http-equiv="refresh" content="0; url=stone-skipping-game.html">
 <style>
 * { box-sizing:border-box }
 html, body {
@@ -20,18 +19,20 @@ html, body {
   color:#555;
   font:14px/1.5 "Courier New", Courier, monospace;
 }
-body {
-  display:grid;
-  place-items:center;
-  overflow:hidden;
-}
-a { color:#888 }
+body { display:grid; place-items:center; overflow:hidden }
+main { display:grid; gap:14px; text-align:left }
+h1 { margin:0 0 6px; color:#ddd; font-size:16px; font-weight:500 }
+a { color:#aaa; text-decoration:none }
+a:hover { color:#fff }
+.hint { color:#444; font-size:12px }
 </style>
 </head>
 <body>
-<a href="stone-skipping-game.html">open Stone Skipping Game</a>
-<script>
-location.replace('stone-skipping-game.html');
-</script>
+<main>
+  <h1>Stone Skipping Game</h1>
+  <a href="stone-skipping-game.html">[ open game ]</a>
+  <a href="stone-skipping-shop-assets-editor.html?asset=shop-frame">[ edit shop frame ]</a>
+  <div class="hint">Save in the editor, then reopen the game.</div>
+</main>
 </body>
 </html>
