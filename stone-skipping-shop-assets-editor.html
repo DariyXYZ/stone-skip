@@ -358,7 +358,99 @@ function clone(value) {
 }
 
 function api() {
-  return gameFrame.contentWindow && gameFrame.contentWindow.StoneSkipAssets;
+  try {
+    return gameFrame.contentWindow && gameFrame.contentWindow.StoneSkipAssets;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredAssetPatch() {
+  try {
+    const raw = localStorage.getItem(ASSET_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredAssetPatch(patch) {
+  try {
+    localStorage.setItem(ASSET_STORAGE_KEY, JSON.stringify(patch));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function deepMergeAsset(base, patch) {
+  if (!patch || typeof patch !== 'object') return base;
+  const next = Array.isArray(base) ? [...base] : { ...(base || {}) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (Array.isArray(value)) {
+      next[key] = clone(value);
+      continue;
+    }
+    if (value && typeof value === 'object') {
+      next[key] = deepMergeAsset(
+        next[key] && typeof next[key] === 'object' && !Array.isArray(next[key]) ? next[key] : {},
+        value
+      );
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
+}
+
+function defaultAssetsFromGameFrame() {
+  try {
+    const gameApi = api();
+    if (gameApi?.defaults) return gameApi.defaults();
+    if (gameFrame.contentWindow?.StoneSkipDefaultAssets) {
+      return gameFrame.contentWindow.StoneSkipDefaultAssets();
+    }
+  } catch {}
+  return null;
+}
+
+function editorFallbackAssets() {
+  const stored = readStoredAssetPatch();
+  const base = defaultAssetsFromGameFrame() || {
+    meta: { version: 1, name: 'Stone Skipping editor fallback' },
+    glyphs: {
+      button: { left: '[ ', right: ' ]' },
+      currency: 'plops',
+    },
+    components: {
+      frames: {
+        shop: { tl: '+', tr: '+', bl: '+', br: '+', h: '-', v: '|', fill: ' ' },
+        shopRaster: '',
+      },
+      labels: {
+        buy: 'Buy',
+        purchased: 'Purchased',
+        need: 'Need',
+        escape: 'escape',
+      },
+    },
+    raster: {
+      splashCover: '',
+      splashTitle: '',
+    },
+    entities: {
+      shopStones: [
+        {
+          id: 'wide-plop',
+          name: 'Wide Plop',
+          cost: 40,
+          desc: 'The stone lands with a wider wake.',
+          art: '',
+        },
+      ],
+    },
+  };
+  return deepMergeAsset(base, stored);
 }
 
 function setStatus(text, isError = false) {
@@ -471,14 +563,22 @@ function defaultShopFrameRaster() {
 }
 
 function currentGameSplashCover() {
-  const doc = gameFrame.contentDocument;
-  if (!doc) return '';
-  const lines = [...doc.querySelectorAll('#sp-stage .spln')].map(node => node.textContent || '');
-  return lines.length ? lines.join('\n') : '';
+  try {
+    const doc = gameFrame.contentDocument;
+    if (!doc) return '';
+    const lines = [...doc.querySelectorAll('#sp-stage .spln')].map(node => node.textContent || '');
+    return lines.length ? lines.join('\n') : '';
+  } catch {
+    return '';
+  }
 }
 
 function currentGameSplashCoverSource() {
-  return gameFrame.contentWindow?.StoneSkipSplashCoverSource || currentGameSplashCover();
+  try {
+    return gameFrame.contentWindow?.StoneSkipSplashCoverSource || currentGameSplashCover();
+  } catch {
+    return currentGameSplashCover();
+  }
 }
 
 function padRasterSides(text, targetCols = 300) {
@@ -512,7 +612,8 @@ function ensureFrameRaster() {
 function ensureSplashCover() {
   if (!assets.raster) assets.raster = {};
   if (!assets.raster.splashCover) {
-    assets.raster.splashCover = padRasterSides(currentGameSplashCoverSource());
+    const source = currentGameSplashCoverSource();
+    assets.raster.splashCover = source ? padRasterSides(source) : '';
   }
 }
 
@@ -695,26 +796,24 @@ function renderPreview() {
 
 function loadAssets() {
   const gameApi = api();
-  if (!gameApi) {
-    setStatus('Game API is not ready yet.', true);
-    return;
-  }
-  assets = gameApi.get();
+  assets = gameApi ? gameApi.get() : editorFallbackAssets();
   buildRefs();
   selectAssetFromUrl();
   activeIndex = Math.min(activeIndex, assetRefs.length - 1);
   renderEditor();
-  setStatus('Loaded from game.');
+  setStatus(gameApi ? 'Loaded from game.' : 'Loaded local assets. Game API is not available, save still writes to game storage.');
 }
 
 function saveAssets() {
   syncFromUi();
   const gameApi = api();
-  if (!gameApi) {
-    setStatus('Game API is not ready yet.', true);
+  const patch = makePatch();
+  if (gameApi) {
+    gameApi.save(patch);
+  } else if (!writeStoredAssetPatch(patch)) {
+    setStatus('Could not write to localStorage.', true);
     return false;
   }
-  gameApi.save(makePatch());
   const cover = assets.raster?.splashCover || '';
   const size = cover ? ` Splash cover: ${rasterWidth(cover)} cols x ${cover.split('\n').length} rows.` : '';
   setStatus(`Saved to this browser.${size}`);
@@ -731,11 +830,11 @@ function saveAndOpenGame() {
 
 function resetAssets() {
   const gameApi = api();
-  if (!gameApi) {
-    setStatus('Game API is not ready yet.', true);
-    return;
+  if (gameApi) {
+    gameApi.reset();
+  } else {
+    try { localStorage.removeItem(ASSET_STORAGE_KEY); } catch {}
   }
-  gameApi.reset();
   loadAssets();
   setStatus('Saved edits reset.');
 }
@@ -743,12 +842,18 @@ function resetAssets() {
 function resetCurrentAsset() {
   const ref = currentRef();
   const gameApi = api();
-  if (!ref || !gameApi) {
-    setStatus('Game API is not ready yet.', true);
+  if (!ref) {
+    setStatus('No asset is selected.', true);
     return;
   }
 
   if (ref.type === 'splash-cover') {
+    if (!gameApi) {
+      assets.raster.splashCover = '';
+      renderEditor();
+      setStatus('Splash cover cleared locally.');
+      return;
+    }
     assets.raster.splashCover = '';
     gameApi.save(makePatch());
     gameFrame.addEventListener('load', () => {
@@ -1023,17 +1128,26 @@ document.addEventListener('keydown', event => {
 
 buildPalette();
 updateHistoryButtons();
-gameFrame.addEventListener('load', () => {
+function waitForGameApiOrFallback() {
+  const startedAt = performance.now();
   const wait = setInterval(() => {
     if (api()) {
       clearInterval(wait);
       loadAssets();
+      return;
+    }
+    if (performance.now() - startedAt > 1200 && !assets) {
+      clearInterval(wait);
+      loadAssets();
     }
   }, 100);
+}
+gameFrame.addEventListener('load', () => {
+  waitForGameApiOrFallback();
 });
 setTimeout(() => {
-  if (!assets) setStatus('Still waiting for game API...', true);
-}, 2500);
+  if (!assets) loadAssets();
+}, 1800);
 </script>
 </body>
 </html>

@@ -589,11 +589,13 @@ function syncAssetConsumers() {
 
 window.StoneSkipAssets = {
   get: () => cloneAsset(assets),
+  defaults: () => cloneAsset(ASSET_PACK),
   apply: applyAssetPatch,
   save: patch => patch ? applyAssetPatch(patch, { persist: true }) : writeStoredAssetPatch(assets),
   reset: resetAssets,
   renderAll: syncAssetConsumers,
 };
+window.StoneSkipDefaultAssets = () => cloneAsset(ASSET_PACK);
 
 // Theme: real palette switch, not visual inversion.
 const THEME_KEY = 'stone-skipping-game-theme';
