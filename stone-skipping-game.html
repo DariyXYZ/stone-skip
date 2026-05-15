@@ -152,17 +152,17 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   height:100%;
   display:flex;
   align-items:center;
-  padding:58px 74px 62px;
+  padding:54px 40px 48px;
 }
 .shop-body {
-  display:grid; grid-template-columns:64px minmax(0,1fr) 64px;
-  align-items:center; gap:22px;
+  display:grid; grid-template-columns:36px minmax(0,1fr) 36px;
+  align-items:center; gap:10px;
   width:100%;
 }
 .shop-center {
   display:flex; flex-direction:column;
   align-items:center; gap:34px;
-  min-width:0;
+  min-width:0; width:100%;
 }
 .shop-arrow {
   justify-self:center; color:var(--shop-line);
@@ -177,7 +177,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   align-items:center;
 }
 .shop-copy {
-  width:min(100%, 460px); text-align:left;
+  width:380px; max-width:100%; text-align:left;
   color:var(--shop-strong); line-height:1.35;
 }
 .shop-head {
@@ -187,7 +187,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 #shop-name, #shop-price { font-size:17px }
 #shop-desc { color:var(--shop-muted); min-height:56px; white-space:normal; overflow-wrap:break-word }
 .shop-actions {
-  margin-top:24px; display:flex; justify-content:space-between; gap:40px;
+  margin-top:24px; display:flex; justify-content:space-between; gap:24px; white-space:nowrap;
 }
 #shop-status { display:none }
 
@@ -265,7 +265,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 // render helpers, which keeps future in-game editing focused on data.
 const ASSET_PACK = {
   meta: {
-    version: 2,
+    version: 3,
     name: 'stone-skipping-game-core',
   },
   glyphs: {
@@ -321,100 +321,110 @@ const ASSET_PACK = {
         name: 'Wide Plop',
         cost: 40,
         desc: 'The stone lands with a wider wake. Useful when the last touch needs more presence.',
-        art: String.raw`        .~~~~~~~~~~.
-     .~~            ~~.
-    .~                ~.
-   .~                  ~.
-  .:                    :.
-  ::                    ::
-  ::                    ::
-  ::                    ::
-  ':                    :'
-   :.                  .:
-    '~.              .~'
-      '~~.        .~~'
-         '~~~~~~~~'`
+        art: String.raw`         ~~~~~~~~~·
+      ~~·          ~~:
+    ~~               ~~:
+   ˙                   ~~:
+  ~:                    ~\
+ ::                      \\
+ ::                       :
+ ::                      ::
+ |:                      ::
+ ::~                    ·:|
+ : :~·                 ~~~
+  -·~~:~~           ·~~~/
+    :~~~\~·-~~~~~-~:~/~~
+      :~~~~~\~~~~~~/~
+         ··\~~~~~~~`
       },
       {
         id: 'lucky-chance',
         name: 'Lucky Chance',
         cost: 55,
         desc: 'One failed landing may correct itself by a single skip when the throw is close.',
-        art: String.raw`          .~~~~~~.
-       .~~      ~~.
-     .~~          ~~.
-    .~    .~~.      ~.
-   .:    /    \     :.
-   ::   :      :    ::
-   ::   :      :    ::
-   ':    \.__/     :'
-    '~.          .~'
-      '~~.    .~~'
-         '~~~~'`
+        art: String.raw`           ~.
+          /  \
+        ~/    ˙~
+   .·~~~·       ˙-~~~.
+   :                 ·
+    ~:             :~
+     ~:\          -~
+      :·           \
+     ::·    ·/\~~   :
+     .:~- ~~:  ~\\~~.
+     ·~~~˙         ~·`
       },
       {
         id: 'red-bite',
         name: 'Red Bite',
         cost: 70,
         desc: 'The aim line bites harder into the water and the first impact feels heavier.',
-        art: String.raw`       .~~~~~~~~~~~\
-     .~~            \
-    .~               \
-   .:                 :
-   ::                 ::
-   ::        .----.   ::
-   ::       /      \  ::
-   ':       \_____/  :'
-    '~.            .~'
-      '~~.      .~~'
-         '~~~~~~'`
+        art: String.raw`       ~~~~\
+      ~:   ·~\
+    ~/        \
+   ~:          \
+  ~:            :
+ ~:             ~\
+ :·               :
+/~-               ~/
+~:~~~           /~/~
+ ~~\~~~~~~~~~~~~~~~
+  · ~~~~~~~~~~~~-`
       },
       {
         id: 'hook-turn',
         name: 'Hook Turn',
         cost: 90,
         desc: 'A crooked stone that keeps a little sideways pull after each bounce.',
-        art: String.raw`        .~~~~~~~.
-     .~~         ~~.
-    .~             ~.
-   .:       __      :.
-   ::     .'  '.    ::
-   ::    /      \   ::
-   ':    \      /  :'
-    '~.   '.__.' .~'
-      '~~.    .~~'
-         '~~~~'`
+        art: String.raw`         ·~~~˙~-~
+       :~˙       ˙·~
+      :~            ~
+      :              ~
+     ::              :
+     |:              :
+      ~\·          /~~
+      -~\~~    /~~~~/
+       :~~~\~~\~~~~:
+          :~~~~~~~`
       },
       {
         id: 'long-skim',
         name: 'Long Skim',
         cost: 120,
         desc: 'Longer surface travel with a narrow wake. Strong, but less forgiving.',
-        art: String.raw`   .~~~~~~~~~~~~~~~~~~.
- .~~                    ~~.
-.~                        ~.
-:                          :
-:                          :
-:      .------------.      :
-:     /              \     :
-'.    \______________/    .'
-  '~~.                .~~'
-     '~~~~~~~~~~~~~~~~'`
+        art: String.raw`     ~-~-~--~-~~~~~~~-
+   ~-~ ·           ···~~
+  /                    ~|
+ :·                    ·::
+ ::                      :
+:::                      |
+:::                      :
+:::                      :
+::|                      :
+:::·                    ·:
+\:~:                    ·:
+·|\~:                  ··:
+ :: ~·\··            ··:|:
+ ˙~:~~~~~·-~~·~~~~~~~~·|/˙
+    -~~~~~-~~~~~~~~~-~-`
       },
       {
         id: 'flat-run',
         name: 'Flat Run',
         cost: 150,
         desc: 'Low fast skips that hold speed across the water before dropping.',
-        art: String.raw`      .----------------.
-   .~~                  ~~.
- .~                        ~.
-:     .--------------.      :
-:    /                \     :
-:    \________________/     :
-'.                          .'
-  '~~.                  .~~'
-      '----------------'`
+        art: String.raw`                     ~·~-
+                  ·/··   \.
+                ·/         :.
+               :·            :
+            ·/·               ~:
+            /:                 ~:
+            \|:                ::
+             \~\              /:|
+              \~~\         /:~/·
+                \~~~:  ·:~~-~
+                  \~~~:~~~~
+                    :·|~~`
       },
     ],
   },
