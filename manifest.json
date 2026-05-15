@@ -1,7 +1,7 @@
 {
-  "name": "Stone Skip",
-  "short_name": "Stone Skip",
-  "start_url": "./stone_challenge.html",
+  "name": "Stone Skipping Game",
+  "short_name": "Stone Skipping",
+  "start_url": "./stone-skipping-game.html",
   "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#000000",

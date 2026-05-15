@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stone Skipping Asset Canvas</title>
+<style>
+* { box-sizing:border-box }
+:root {
+  --bg:#050505;
+  --panel:#0d0d0d;
+  --line:#292929;
+  --line-hot:#e9e9e9;
+  --text:#f1f1f1;
+  --muted:#878787;
+  --soft:#151515;
+}
+body {
+  margin:0;
+  min-height:100vh;
+  background:var(--bg);
+  color:var(--text);
+  font:14px/1.45 "Courier New", Courier, monospace;
+}
+button, input, textarea {
+  font:inherit;
+  color:var(--text);
+  background:#050505;
+  border:1px solid var(--line);
+}
+button {
+  min-height:32px;
+  padding:6px 10px;
+  cursor:pointer;
+}
+button:hover, button.active { border-color:var(--line-hot); background:#111 }
+input { min-height:32px; padding:6px 8px }
+textarea {
+  width:100%;
+  min-height:calc(100vh - 190px);
+  padding:18px;
+  resize:none;
+  line-height:1.18;
+  white-space:pre;
+  overflow:auto;
+  tab-size:2;
+}
+.app {
+  display:grid;
+  grid-template-columns:310px minmax(620px,1fr);
+  gap:14px;
+  padding:14px;
+  min-height:100vh;
+}
+.rail, .canvas {
+  min-width:0;
+  border:1px solid var(--line);
+  background:var(--panel);
+}
+.rail { position:sticky; top:14px; height:calc(100vh - 28px); overflow:auto }
+.section { padding:12px; border-bottom:1px solid var(--line) }
+.section:last-child { border-bottom:0 }
+.title {
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:10px;
+}
+h1, h2 { margin:0; font-size:14px; font-weight:700; letter-spacing:0 }
+.hint { color:var(--muted); font-size:12px }
+.stack { display:grid; gap:8px }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+.tabs { display:grid; gap:6px }
+.tab {
+  width:100%;
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  text-align:left;
+}
+.tab span:last-child { color:var(--muted) }
+.palette {
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+}
+.palette button {
+  width:31px;
+  height:31px;
+  padding:0;
+  display:grid;
+  place-items:center;
+}
+.palette button.active { border-color:var(--line-hot); background:#1a1a1a }
+.brush-grid {
+  display:grid;
+  grid-template-columns:1fr 70px;
+  gap:8px;
+  align-items:end;
+}
+.brush-grid input[type="range"] {
+  grid-column:1 / -1;
+  width:100%;
+  accent-color:#f1f1f1;
+}
+.brush-readout {
+  display:grid;
+  place-items:center;
+  min-height:32px;
+  border:1px solid var(--line);
+  background:#050505;
+}
+.canvas-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:12px;
+  border-bottom:1px solid var(--line);
+}
+.meta {
+  display:grid;
+  grid-template-columns:minmax(180px,1fr) 110px;
+  gap:8px;
+  padding:12px;
+  border-bottom:1px solid var(--line);
+}
+.field { display:grid; gap:4px }
+.field label { color:var(--muted); font-size:12px }
+.hidden { display:none !important }
+.status { min-height:20px; color:var(--muted) }
+.error { color:#ff7777 }
+.modal {
+  position:fixed;
+  inset:0;
+  z-index:50;
+  display:none;
+  background:rgba(0,0,0,.82);
+  padding:24px;
+}
+.modal.open { display:grid; grid-template-rows:auto 1fr; gap:12px }
+.modal-head {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+}
+.preview-stage {
+  border:1px solid var(--line);
+  background:#000;
+  overflow:auto;
+  padding:18px;
+}
+pre {
+  margin:0;
+  font:14px/1.18 "Courier New", Courier, monospace;
+  white-space:pre;
+  text-shadow:.35px 0 currentColor;
+}
+.shop-frame { position:relative; width:max-content; margin:auto }
+.shop-frame > pre:first-child { color:#dadada }
+.shop-content {
+  position:absolute;
+  inset:28px 24px;
+  overflow:hidden;
+  display:grid;
+  grid-template-rows:auto auto 1fr auto auto;
+  gap:8px;
+  color:#f2f2f2;
+}
+.shop-content pre { overflow:hidden; max-width:100%; min-width:0 }
+.shop-title, .shop-price, .shop-desc, .shop-actions { text-align:center }
+.shop-desc { white-space:pre-wrap; line-height:1.25; color:#d0d0d0 }
+.shop-art { justify-self:center; align-self:center }
+iframe { display:none }
+@media (max-width:900px) {
+  .app { grid-template-columns:1fr; padding:8px }
+  .rail { position:static; height:auto }
+}
+</style>
+</head>
+<body>
+<iframe id="game-frame" src="stone-skipping-game.html?asset-editor=1&v=source-cover-2026-05-15" title="Stone Skipping Game asset source"></iframe>
+
+<main class="app">
+  <aside class="rail">
+    <section class="section">
+      <div class="title">
+        <h1>Stone Skipping</h1>
+        <span class="hint">asset canvas</span>
+      </div>
+      <div class="stack">
+        <button id="load-assets">Reload from game</button>
+        <button id="save-assets">Save to game localStorage</button>
+        <button id="save-open-game">Save and open game</button>
+        <button id="reset-assets">Reset saved edits</button>
+        <div id="status" class="status">Loading asset pack...</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="title">
+        <h2>Assets</h2>
+        <span id="asset-count" class="hint"></span>
+      </div>
+      <div id="asset-tabs" class="tabs"></div>
+    </section>
+
+    <section class="section">
+      <div class="title">
+        <h2>Symbols</h2>
+        <span class="hint">brush / insert</span>
+      </div>
+      <div id="palette" class="palette"></div>
+    </section>
+
+    <section class="section">
+      <div class="title">
+        <h2>Smart Brush</h2>
+        <span id="brush-state" class="hint">off</span>
+      </div>
+      <div class="stack">
+        <button id="brush-toggle">Enable brush</button>
+        <label class="row hint" style="justify-content:space-between">
+          <span>Smart dynamics</span>
+          <input id="brush-smart" type="checkbox" checked style="width:auto;min-height:auto">
+        </label>
+        <div class="brush-grid">
+          <div class="field">
+            <label for="brush-size">Pen thickness</label>
+            <input id="brush-size" type="range" min="1" max="9" step="1" value="1">
+          </div>
+          <div class="field">
+            <label>Char</label>
+            <div id="brush-char" class="brush-readout">#</div>
+          </div>
+        </div>
+        <div class="hint">Drag on the big text field. Lines overwrite existing symbols.</div>
+      </div>
+    </section>
+  </aside>
+
+  <section class="canvas">
+    <div class="canvas-head">
+      <div>
+        <h2 id="asset-title">Asset</h2>
+        <div id="asset-size" class="hint"></div>
+      </div>
+      <div class="row">
+        <button id="preview-shop">Preview shop</button>
+        <button id="undo-edit">Undo</button>
+        <button id="redo-edit">Redo</button>
+        <button id="reset-current">Reset current asset</button>
+        <button id="normalize-art">Apply game centering</button>
+        <button id="copy-patch">Copy patch</button>
+        <button id="download-patch">Download patch</button>
+      </div>
+    </div>
+
+    <div id="item-meta" class="meta">
+      <div class="field">
+        <label for="asset-name">Name</label>
+        <input id="asset-name" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="asset-cost">Cost</label>
+        <input id="asset-cost" type="number" min="0" step="1">
+      </div>
+      <div class="field" style="grid-column:1 / -1">
+        <label for="asset-desc">Description</label>
+        <input id="asset-desc" autocomplete="off">
+      </div>
+    </div>
+
+    <textarea id="asset-canvas" spellcheck="false" wrap="off"></textarea>
+  </section>
+</main>
+
+<div id="preview-modal" class="modal" aria-hidden="true">
+  <div class="modal-head">
+    <div>
+      <h2>Shop Preview</h2>
+      <div class="hint">uses the same centering as the game</div>
+    </div>
+    <button id="close-preview">Close</button>
+  </div>
+  <div class="preview-stage">
+    <div class="shop-frame">
+      <pre id="frame-preview"></pre>
+      <div class="shop-content">
+        <pre id="preview-title" class="shop-title"></pre>
+        <pre id="preview-price" class="shop-price"></pre>
+        <pre id="preview-art" class="shop-art"></pre>
+        <pre id="preview-desc" class="shop-desc"></pre>
+        <pre id="preview-actions" class="shop-actions"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const gameFrame = document.getElementById('game-frame');
+const statusEl = document.getElementById('status');
+const tabsEl = document.getElementById('asset-tabs');
+const paletteEl = document.getElementById('palette');
+const canvasEl = document.getElementById('asset-canvas');
+const itemMetaEl = document.getElementById('item-meta');
+const modalEl = document.getElementById('preview-modal');
+const nameEl = document.getElementById('asset-name');
+const costEl = document.getElementById('asset-cost');
+const descEl = document.getElementById('asset-desc');
+const brushToggleEl = document.getElementById('brush-toggle');
+const brushSizeEl = document.getElementById('brush-size');
+const brushSmartEl = document.getElementById('brush-smart');
+const brushStateEl = document.getElementById('brush-state');
+const brushCharEl = document.getElementById('brush-char');
+const undoEl = document.getElementById('undo-edit');
+const redoEl = document.getElementById('redo-edit');
+const resetCurrentEl = document.getElementById('reset-current');
+const downloadPatchEl = document.getElementById('download-patch');
+const ASSET_STORAGE_KEY = 'stone-skipping-game-asset-patch-v1';
+
+let assets = null;
+let assetRefs = [];
+let activeIndex = 0;
+let brushEnabled = false;
+let smartBrushEnabled = true;
+let brushChar = '#';
+let brushPointerId = null;
+let lastBrushPoint = null;
+let lastBrushTime = 0;
+let charMetrics = null;
+let undoStack = [];
+let redoStack = [];
+let historyTimer = null;
+let beforeBrushValue = '';
+
+function clone(value) {
+  return typeof structuredClone === 'function'
+    ? structuredClone(value)
+    : JSON.parse(JSON.stringify(value));
+}
+
+function api() {
+  return gameFrame.contentWindow && gameFrame.contentWindow.StoneSkipAssets;
+}
+
+function setStatus(text, isError = false) {
+  statusEl.textContent = text;
+  statusEl.classList.toggle('error', isError);
+}
+
+function updateHistoryButtons() {
+  undoEl.disabled = undoStack.length === 0;
+  redoEl.disabled = redoStack.length === 0;
+}
+
+function resetHistory() {
+  undoStack = [];
+  redoStack = [];
+  clearTimeout(historyTimer);
+  historyTimer = null;
+  updateHistoryButtons();
+}
+
+function pushHistory(value) {
+  if (undoStack[undoStack.length - 1] === value || canvasEl.value === value) return;
+  undoStack.push(value);
+  if (undoStack.length > 120) undoStack.shift();
+  redoStack = [];
+  updateHistoryButtons();
+}
+
+function scheduleHistory(value) {
+  clearTimeout(historyTimer);
+  historyTimer = setTimeout(() => {
+    pushHistory(value);
+    historyTimer = null;
+  }, 260);
+}
+
+function applyCanvasValue(value) {
+  canvasEl.value = value;
+  syncFromUi();
+  document.getElementById('asset-size').textContent = artStats(canvasEl.value);
+}
+
+function undoEdit() {
+  if (!undoStack.length) return;
+  redoStack.push(canvasEl.value);
+  applyCanvasValue(undoStack.pop());
+  updateHistoryButtons();
+}
+
+function redoEdit() {
+  if (!redoStack.length) return;
+  undoStack.push(canvasEl.value);
+  applyCanvasValue(redoStack.pop());
+  updateHistoryButtons();
+}
+
+function drawFrame(frame, cols, rows) {
+  const w = Math.max(2, cols | 0);
+  const h = Math.max(2, rows | 0);
+  const top = frame.tl + frame.h.repeat(w - 2) + frame.tr;
+  const mid = frame.v + (frame.fill || ' ').repeat(w - 2) + frame.v;
+  const bot = frame.bl + frame.h.repeat(w - 2) + frame.br;
+  return [top, ...Array(Math.max(0, h - 2)).fill(mid), bot].join('\n');
+}
+
+function gameFormatShopArt(art) {
+  const lines = art.replace(/\r/g, '').split('\n');
+  let minIndent = Infinity;
+  lines.forEach(line => {
+    if (!line.trim()) return;
+    minIndent = Math.min(minIndent, line.match(/^\s*/)[0].length);
+  });
+  const trimmed = lines.map(line => line.slice(Number.isFinite(minIndent) ? minIndent : 0).trimEnd());
+  const width = Math.max(...trimmed.map(line => line.length), 0);
+  const targetW = Math.max(34, width + 2);
+  return trimmed.map(line => {
+    const pad = Math.max(0, targetW - line.length);
+    return ' '.repeat(Math.floor(pad / 2)) + line + ' '.repeat(Math.ceil(pad / 2));
+  }).join('\n');
+}
+
+function defaultShopFrameRaster() {
+  return drawFrame(assets.components.frames.shop, 56, 28);
+}
+
+function currentGameSplashCover() {
+  const doc = gameFrame.contentDocument;
+  if (!doc) return '';
+  const lines = [...doc.querySelectorAll('#sp-stage .spln')].map(node => node.textContent || '');
+  return lines.length ? lines.join('\n') : '';
+}
+
+function currentGameSplashCoverSource() {
+  return gameFrame.contentWindow?.StoneSkipSplashCoverSource || currentGameSplashCover();
+}
+
+function padRasterSides(text, targetCols = 300) {
+  const lines = text.replace(/\r/g, '').split('\n');
+  const width = Math.max(0, ...lines.map(line => line.length));
+  const target = Math.max(targetCols, width);
+  return lines.map(line => {
+    const clean = line.padEnd(width, ' ');
+    const pad = target - width;
+    return ' '.repeat(Math.floor(pad / 2)) + clean + ' '.repeat(Math.ceil(pad / 2));
+  }).join('\n');
+}
+
+function rasterWidth(text) {
+  return Math.max(0, ...text.replace(/\r/g, '').split('\n').map(line => line.length));
+}
+
+function normalizeSplashCoverCanvas() {
+  if (!assets.raster) assets.raster = {};
+  if (assets.raster.splashCover && rasterWidth(assets.raster.splashCover) < 300) {
+    assets.raster.splashCover = padRasterSides(assets.raster.splashCover);
+  }
+}
+
+function ensureFrameRaster() {
+  if (!assets.components.frames.shopRaster) {
+    assets.components.frames.shopRaster = defaultShopFrameRaster();
+  }
+}
+
+function ensureSplashCover() {
+  if (!assets.raster) assets.raster = {};
+  if (!assets.raster.splashCover) {
+    assets.raster.splashCover = padRasterSides(currentGameSplashCoverSource());
+  }
+}
+
+function buildRefs() {
+  ensureFrameRaster();
+  ensureSplashCover();
+  normalizeSplashCoverCanvas();
+  assetRefs = [
+    {
+      type:'splash-cover',
+      label:'Splash Cover FHD',
+      sub:'cover raster',
+      get:() => assets.raster.splashCover || '',
+      set:value => { assets.raster.splashCover = value.replace(/\r/g, ''); },
+    },
+    {
+      type:'splash-title',
+      label:'Splash Title',
+      sub:'logo raster',
+      get:() => assets.raster.splashTitle || '',
+      set:value => { assets.raster.splashTitle = value.replace(/\r/g, ''); },
+    },
+    {
+      type:'frame',
+      label:'Shop Frame',
+      sub:'full raster',
+      get:() => assets.components.frames.shopRaster,
+      set:value => { assets.components.frames.shopRaster = value.replace(/\r/g, ''); },
+    },
+    ...assets.entities.shopStones.map((item, index) => ({
+      type:'shop-item',
+      index,
+      label:item.name,
+      sub:String(item.cost),
+      get:() => assets.entities.shopStones[index].art,
+      set:value => { assets.entities.shopStones[index].art = value.replace(/\r/g, ''); },
+    })),
+  ];
+}
+
+function selectAssetFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const type = params.get('asset');
+  const id = params.get('id');
+  if (!type && !id) return;
+  const wantedType = type && type.toLowerCase();
+  const wantedId = id && id.toLowerCase();
+  const index = assetRefs.findIndex(ref => {
+    if (wantedType === 'shop-frame') return ref.type === 'frame';
+    if (wantedType === 'splash-cover') return ref.type === 'splash-cover';
+    if (wantedType === 'splash-title') return ref.type === 'splash-title';
+    if (wantedType === 'shop-stone' && wantedId && ref.type === 'shop-item') {
+      return assets.entities.shopStones[ref.index]?.id?.toLowerCase() === wantedId;
+    }
+    return false;
+  });
+  if (index >= 0) activeIndex = index;
+}
+
+function currentRef() {
+  return assetRefs[activeIndex];
+}
+
+function syncFromUi() {
+  if (!assets || !currentRef()) return;
+  const ref = currentRef();
+  ref.set(canvasEl.value);
+  if (ref.type === 'shop-item') {
+    const item = assets.entities.shopStones[ref.index];
+    item.name = nameEl.value;
+    item.cost = Number(costEl.value) || 0;
+    item.desc = descEl.value;
+  }
+}
+
+function artStats(text) {
+  const lines = text.replace(/\r/g, '').split('\n');
+  const width = Math.max(0, ...lines.map(line => line.length));
+  return `${width} cols x ${lines.length} rows`;
+}
+
+function renderTabs() {
+  tabsEl.innerHTML = '';
+  document.getElementById('asset-count').textContent = String(assetRefs.length);
+  assetRefs.forEach((ref, index) => {
+    const btn = document.createElement('button');
+    btn.className = `tab${index === activeIndex ? ' active' : ''}`;
+    btn.innerHTML = `<span>${ref.label}</span><span>${ref.sub}</span>`;
+    btn.addEventListener('click', () => {
+      syncFromUi();
+      buildRefs();
+      activeIndex = index;
+      renderEditor();
+    });
+    tabsEl.appendChild(btn);
+  });
+}
+
+function renderEditor() {
+  resetHistory();
+  const ref = currentRef();
+  document.getElementById('asset-title').textContent = ref.label;
+  canvasEl.value = ref.get();
+  itemMetaEl.classList.toggle('hidden', ref.type !== 'shop-item');
+  if (ref.type === 'shop-item') {
+    const item = assets.entities.shopStones[ref.index];
+    nameEl.value = item.name;
+    costEl.value = item.cost;
+    descEl.value = item.desc;
+  }
+  document.getElementById('asset-size').textContent = artStats(canvasEl.value);
+  renderTabs();
+  requestAnimationFrame(() => {
+    canvasEl.scrollLeft = ref.type === 'splash-cover'
+      ? Math.max(0, (canvasEl.scrollWidth - canvasEl.clientWidth) / 2)
+      : 0;
+    canvasEl.scrollTop = 0;
+  });
+}
+
+function renderButton(label) {
+  return `${assets.glyphs.button.left}${label}${assets.glyphs.button.right}`;
+}
+
+function makePatch() {
+  return {
+    raster: {
+      splashCover: assets.raster?.splashCover || '',
+      splashTitle: assets.raster?.splashTitle || '',
+    },
+    components: {
+      frames: {
+        shop: clone(assets.components.frames.shop),
+        shopRaster: assets.components.frames.shopRaster || '',
+      },
+      labels: clone(assets.components.labels),
+    },
+    glyphs: clone(assets.glyphs),
+    entities: {
+      shopStones: clone(assets.entities.shopStones),
+    },
+  };
+}
+
+function patchText() {
+  syncFromUi();
+  return JSON.stringify(makePatch(), null, 2);
+}
+
+function downloadPatch() {
+  const blob = new Blob([patchText()], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'stone-skipping-assets-patch.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  setStatus('Patch downloaded.');
+}
+
+function renderPreview() {
+  syncFromUi();
+  buildRefs();
+  const itemRef = currentRef().type === 'shop-item'
+    ? currentRef()
+    : assetRefs.find(ref => ref.type === 'shop-item');
+  const item = assets.entities.shopStones[itemRef.index];
+  document.getElementById('frame-preview').textContent =
+    assets.components.frames.shopRaster && assets.components.frames.shopRaster.trim()
+      ? assets.components.frames.shopRaster
+      : defaultShopFrameRaster();
+  document.getElementById('preview-title').textContent = item.name;
+  document.getElementById('preview-price').textContent = `${item.cost} ${assets.glyphs.currency}`;
+  document.getElementById('preview-art').textContent = gameFormatShopArt(item.art);
+  document.getElementById('preview-desc').textContent = item.desc;
+  document.getElementById('preview-actions').textContent =
+    `${renderButton(assets.components.labels.buy)}   ${renderButton(`${assets.components.labels.need} 00 ${assets.glyphs.currency}`)}`;
+}
+
+function loadAssets() {
+  const gameApi = api();
+  if (!gameApi) {
+    setStatus('Game API is not ready yet.', true);
+    return;
+  }
+  assets = gameApi.get();
+  buildRefs();
+  selectAssetFromUrl();
+  activeIndex = Math.min(activeIndex, assetRefs.length - 1);
+  renderEditor();
+  setStatus('Loaded from game.');
+}
+
+function saveAssets() {
+  syncFromUi();
+  const gameApi = api();
+  if (!gameApi) {
+    setStatus('Game API is not ready yet.', true);
+    return false;
+  }
+  gameApi.save(makePatch());
+  const cover = assets.raster?.splashCover || '';
+  const size = cover ? ` Splash cover: ${rasterWidth(cover)} cols x ${cover.split('\n').length} rows.` : '';
+  setStatus(`Saved to this browser.${size}`);
+  return true;
+}
+
+function openGameWithCacheBust() {
+  window.open(`stone-skipping-game.html?cover-v=${Date.now()}`, '_blank', 'noopener');
+}
+
+function saveAndOpenGame() {
+  if (saveAssets()) openGameWithCacheBust();
+}
+
+function resetAssets() {
+  const gameApi = api();
+  if (!gameApi) {
+    setStatus('Game API is not ready yet.', true);
+    return;
+  }
+  gameApi.reset();
+  loadAssets();
+  setStatus('Saved edits reset.');
+}
+
+function resetCurrentAsset() {
+  const ref = currentRef();
+  const gameApi = api();
+  if (!ref || !gameApi) {
+    setStatus('Game API is not ready yet.', true);
+    return;
+  }
+
+  if (ref.type === 'splash-cover') {
+    assets.raster.splashCover = '';
+    gameApi.save(makePatch());
+    gameFrame.addEventListener('load', () => {
+      assets = api().get();
+      assets.raster.splashCover = padRasterSides(currentGameSplashCoverSource());
+      buildRefs();
+      activeIndex = 0;
+      renderEditor();
+      setStatus('Splash cover reset to the old generated cover.');
+    }, { once:true });
+    gameFrame.contentWindow.location.reload();
+    return;
+  }
+
+  if (ref.type === 'frame') {
+    pushHistory(canvasEl.value);
+    assets.components.frames.shopRaster = defaultShopFrameRaster();
+    renderEditor();
+    setStatus('Shop frame reset to the generated rectangle.');
+    return;
+  }
+
+  setStatus('Only Splash Cover and Shop Frame have a local reset right now.');
+}
+
+function insertAtCursor(value) {
+  canvasEl.focus();
+  pushHistory(canvasEl.value);
+  const start = canvasEl.selectionStart;
+  const end = canvasEl.selectionEnd;
+  canvasEl.value = canvasEl.value.slice(0, start) + value + canvasEl.value.slice(end);
+  canvasEl.selectionStart = canvasEl.selectionEnd = start + value.length;
+  syncFromUi();
+  document.getElementById('asset-size').textContent = artStats(canvasEl.value);
+}
+
+function refreshBrushUi() {
+  brushToggleEl.textContent = brushEnabled ? 'Disable brush' : 'Enable brush';
+  brushStateEl.textContent = brushEnabled
+    ? `${smartBrushEnabled ? 'smart' : 'plain'} / ${brushSizeEl.value} char`
+    : 'off';
+  brushCharEl.textContent = brushChar === ' ' ? 'sp' : brushChar;
+  [...paletteEl.children].forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.symbol === brushChar);
+  });
+}
+
+function measureCanvasChars() {
+  const styles = getComputedStyle(canvasEl);
+  const probe = document.createElement('span');
+  probe.textContent = 'MMMMMMMMMMMMMMMMMMMM';
+  probe.style.cssText = `
+    position:absolute; left:-9999px; top:-9999px; visibility:hidden;
+    font:${styles.font}; letter-spacing:${styles.letterSpacing};
+    white-space:pre; line-height:${styles.lineHeight};
+  `;
+  document.body.appendChild(probe);
+  const charWidth = probe.getBoundingClientRect().width / probe.textContent.length;
+  document.body.removeChild(probe);
+  const lineHeight = parseFloat(styles.lineHeight) || parseFloat(styles.fontSize) * 1.18;
+  charMetrics = {
+    charWidth,
+    lineHeight,
+    padLeft: parseFloat(styles.paddingLeft) || 0,
+    padTop: parseFloat(styles.paddingTop) || 0,
+  };
+  return charMetrics;
+}
+
+function pointerToCell(event) {
+  const metrics = charMetrics || measureCanvasChars();
+  const rect = canvasEl.getBoundingClientRect();
+  const x = event.clientX - rect.left - metrics.padLeft + canvasEl.scrollLeft;
+  const y = event.clientY - rect.top - metrics.padTop + canvasEl.scrollTop;
+  return {
+    col: Math.max(0, Math.floor(x / metrics.charWidth)),
+    row: Math.max(0, Math.floor(y / metrics.lineHeight)),
+  };
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function smartBrushChar(energy, edge, salt) {
+  if (brushChar === ' ') return ' ';
+  if (!smartBrushEnabled) return brushChar;
+  const ramp = '.,:;+*?S#@';
+  const jitter = ((salt * 1103515245 + 12345) >>> 0) / 4294967295;
+  const intensity = clamp01((energy ** 0.85) * 1.05 + edge * 0.08 + (jitter - 0.5) * 0.10 - 0.04);
+  return ramp[Math.max(0, Math.min(ramp.length - 1, Math.round(intensity * (ramp.length - 1))))];
+}
+
+function paintCell(lines, col, row, radius, energy) {
+  const r = Math.max(0, radius);
+  for (let yy = row - r; yy <= row + r; yy++) {
+    if (yy < 0) continue;
+    while (lines.length <= yy) lines.push('');
+    const chars = lines[yy].split('');
+    for (let xx = col - r; xx <= col + r; xx++) {
+      if (xx < 0) continue;
+      const d = Math.hypot(xx - col, (yy - row) * 1.85);
+      if (d > r + 0.15) continue;
+      while (chars.length <= xx) chars.push(' ');
+      const edge = 1 - d / (r + 1.15);
+      chars[xx] = smartBrushChar(energy, edge, xx * 97 + yy * 193);
+    }
+    lines[yy] = chars.join('').replace(/\s+$/g, '');
+  }
+}
+
+function paintLine(from, to, energy = 1) {
+  const lines = canvasEl.value.replace(/\r/g, '').split('\n');
+  const radius = Math.max(0, Number(brushSizeEl.value) - 1);
+  const dx = to.col - from.col;
+  const dy = to.row - from.row;
+  const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) * 2));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    paintCell(
+      lines,
+      Math.round(from.col + dx * t),
+      Math.round(from.row + dy * t),
+      radius,
+      energy
+    );
+  }
+  canvasEl.value = lines.join('\n');
+  syncFromUi();
+  document.getElementById('asset-size').textContent = artStats(canvasEl.value);
+}
+
+function brushEnergy(from, to, event) {
+  const now = event.timeStamp || performance.now();
+  const dt = Math.max(8, now - lastBrushTime);
+  const dist = Math.hypot(to.col - from.col, to.row - from.row);
+  const speed = dist / dt;
+  lastBrushTime = now;
+  return clamp01(1 - (speed - 0.004) / 0.130);
+}
+
+function buildPalette() {
+  const symbols = [' ', '.', ',', ':', ';', '+', '*', '?', '%', 'S', '#', '@', '~', '/', '\\', '-', '|', '_', '·', '˙', '╭', '╮', '╰', '╯', '─', '│', '╴', '╶', '╵', '╷', '[', ']', '<', '>'];
+  for (const symbol of symbols) {
+    const btn = document.createElement('button');
+    btn.dataset.symbol = symbol;
+    btn.textContent = symbol === ' ' ? 'sp' : symbol;
+    btn.title = symbol === ' ' ? 'space' : symbol;
+    btn.addEventListener('click', () => {
+      brushChar = symbol;
+      refreshBrushUi();
+      if (!brushEnabled) insertAtCursor(symbol);
+    });
+    paletteEl.appendChild(btn);
+  }
+  refreshBrushUi();
+}
+
+canvasEl.addEventListener('input', () => {
+  scheduleHistory(canvasEl.dataset.beforeInputValue || '');
+  canvasEl.dataset.beforeInputValue = canvasEl.value;
+  syncFromUi();
+  document.getElementById('asset-size').textContent = artStats(canvasEl.value);
+});
+canvasEl.addEventListener('beforeinput', () => {
+  canvasEl.dataset.beforeInputValue = canvasEl.value;
+});
+canvasEl.addEventListener('pointerdown', event => {
+  if (!brushEnabled || event.button !== 0) return;
+  event.preventDefault();
+  canvasEl.focus();
+  beforeBrushValue = canvasEl.value;
+  measureCanvasChars();
+  brushPointerId = event.pointerId;
+  canvasEl.setPointerCapture(brushPointerId);
+  lastBrushPoint = pointerToCell(event);
+  lastBrushTime = event.timeStamp || performance.now();
+  paintLine(lastBrushPoint, lastBrushPoint, 1);
+});
+canvasEl.addEventListener('pointermove', event => {
+  if (!brushEnabled || brushPointerId !== event.pointerId || !lastBrushPoint) return;
+  event.preventDefault();
+  const next = pointerToCell(event);
+  const energy = brushEnergy(lastBrushPoint, next, event);
+  paintLine(lastBrushPoint, next, energy);
+  lastBrushPoint = next;
+});
+function endBrushStroke(event) {
+  if (brushPointerId !== event.pointerId) return;
+  try { canvasEl.releasePointerCapture(brushPointerId); } catch {}
+  pushHistory(beforeBrushValue);
+  beforeBrushValue = '';
+  brushPointerId = null;
+  lastBrushPoint = null;
+}
+canvasEl.addEventListener('pointerup', endBrushStroke);
+canvasEl.addEventListener('pointercancel', endBrushStroke);
+for (const input of [nameEl, costEl, descEl]) {
+  input.addEventListener('input', () => {
+    syncFromUi();
+    buildRefs();
+    renderTabs();
+    document.getElementById('asset-title').textContent = currentRef().label;
+  });
+}
+
+document.getElementById('load-assets').addEventListener('click', loadAssets);
+document.getElementById('save-assets').addEventListener('click', saveAssets);
+document.getElementById('save-open-game').addEventListener('click', saveAndOpenGame);
+document.getElementById('reset-assets').addEventListener('click', resetAssets);
+resetCurrentEl.addEventListener('click', resetCurrentAsset);
+undoEl.addEventListener('click', undoEdit);
+redoEl.addEventListener('click', redoEdit);
+brushToggleEl.addEventListener('click', () => {
+  brushEnabled = !brushEnabled;
+  canvasEl.style.cursor = brushEnabled ? 'crosshair' : 'text';
+  refreshBrushUi();
+});
+brushSmartEl.addEventListener('change', () => {
+  smartBrushEnabled = brushSmartEl.checked;
+  refreshBrushUi();
+});
+brushSizeEl.addEventListener('input', refreshBrushUi);
+window.addEventListener('resize', () => { charMetrics = null; });
+document.getElementById('normalize-art').addEventListener('click', () => {
+  if (currentRef().type === 'shop-item') {
+    canvasEl.value = gameFormatShopArt(canvasEl.value);
+    syncFromUi();
+    document.getElementById('asset-size').textContent = artStats(canvasEl.value);
+  }
+});
+document.getElementById('copy-patch').addEventListener('click', async () => {
+  const text = patchText();
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus('Patch copied.');
+  } catch {
+    setStatus('Copy failed, but save still works.', true);
+  }
+});
+downloadPatchEl.addEventListener('click', downloadPatch);
+document.getElementById('preview-shop').addEventListener('click', () => {
+  renderPreview();
+  modalEl.classList.add('open');
+  modalEl.setAttribute('aria-hidden', 'false');
+});
+document.getElementById('close-preview').addEventListener('click', () => {
+  modalEl.classList.remove('open');
+  modalEl.setAttribute('aria-hidden', 'true');
+});
+function handleHistoryShortcut(event) {
+  const isUndoKey = event.code === 'KeyZ' || event.key.toLowerCase() === 'z';
+  const isRedoKey = event.code === 'KeyY' || event.key.toLowerCase() === 'y';
+  if ((event.ctrlKey || event.metaKey) && (isUndoKey || isRedoKey)) {
+    event.preventDefault();
+    event.stopPropagation();
+    if ((isUndoKey && event.shiftKey) || isRedoKey) redoEdit();
+    else undoEdit();
+    return;
+  }
+}
+
+document.addEventListener('keydown', handleHistoryShortcut, true);
+canvasEl.addEventListener('keydown', handleHistoryShortcut, true);
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    modalEl.classList.remove('open');
+    modalEl.setAttribute('aria-hidden', 'true');
+  }
+});
+
+buildPalette();
+updateHistoryButtons();
+gameFrame.addEventListener('load', () => {
+  const wait = setInterval(() => {
+    if (api()) {
+      clearInterval(wait);
+      loadAssets();
+    }
+  }, 100);
+});
+setTimeout(() => {
+  if (!assets) setStatus('Still waiting for game API...', true);
+}, 2500);
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>stone skip — challenge</title>
+<title>Stone Skipping Game</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -130,31 +130,52 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 }
 #shop-modal.open { display:grid }
 #shop-panel {
-  width:min(88vw, 620px);
-  min-height:470px;
+  width:min(88vw, 680px);
+  height:min(78vh, 540px);
+  min-height:430px;
   overflow:hidden;
   display:grid;
-  grid-template-rows:1fr auto;
+  position:relative;
   background:var(--bg);
   color:var(--shop-strong);
 }
+#shop-frame {
+  position:absolute; inset:0; z-index:0;
+  color:var(--shop-line);
+  font-family:'Courier New',Courier,monospace;
+  font-size:14px; font-weight:500; line-height:1.18;
+  white-space:pre; pointer-events:none;
+  text-shadow:.35px 0 currentColor;
+}
+#shop-panel > div {
+  position:relative; z-index:1;
+  height:100%;
+  display:flex;
+  align-items:center;
+  padding:38px 50px 42px;
+}
 .shop-body {
-  display:grid; grid-template-columns:42px auto 42px;
-  justify-content:center; align-items:center; gap:6px; min-height:300px;
+  display:grid; grid-template-columns:40px minmax(0,1fr) 40px;
+  align-items:center; gap:16px;
+  width:100%;
+}
+.shop-center {
+  display:flex; flex-direction:column;
+  align-items:center; gap:20px;
+  min-width:0;
 }
 .shop-arrow {
   justify-self:center; color:var(--shop-line);
   font-size:28px; line-height:1;
 }
 #shop-art {
-  white-space:pre; justify-self:center; align-self:center;
+  white-space:pre;
   font-size:14px; line-height:1.05; color:var(--shop-strong);
   text-shadow:.35px 0 currentColor;
-  text-align:left;
 }
 .shop-copy {
-  width:330px; justify-self:center; text-align:left;
-  color:var(--shop-strong); line-height:1.35; padding-bottom:18px;
+  width:100%; text-align:left;
+  color:var(--shop-strong); line-height:1.35;
 }
 .shop-head {
   display:flex; justify-content:space-between; gap:24px;
@@ -175,22 +196,22 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 }
 #sp-stage, #sp-title {
   font-family:'Courier New',Courier,monospace;
-  font-size:min(0.833vw,0.95vh);
+  font-size:var(--splash-font-size, 10px);
   font-weight:500;
   line-height:1.15; white-space:pre; letter-spacing:0;
   width:220ch; flex-shrink:0;
   text-shadow:.35px 0 currentColor;
 }
-#sp-stage { color:var(--splash-stage); }
+#sp-stage { color:var(--splash-stage); width:var(--splash-stage-width, 300ch); }
 #sp-stage .spln { display:block; opacity:0; transition:opacity .06s linear; }
 #sp-stage .spln.on { opacity:1; }
-#sp-title { color:var(--splash-title); margin-top:.45em; opacity:0; transition:opacity .9s ease; }
+#sp-title { color:var(--splash-title); margin-top:.12em; opacity:0; transition:opacity .9s ease; }
 #sp-title.on { opacity:1; }
 #sp-prompt {
   font-family:'Courier New',monospace;
-  font-size:min(0.7vw,1.1vh); color:var(--splash-prompt); letter-spacing:4px;
+  font-size:calc(var(--splash-font-size, 10px) * .72); color:var(--splash-prompt); letter-spacing:4px;
   opacity:0; transition:opacity .8s; white-space:nowrap;
-  margin-top:.7em; flex-shrink:0;
+  margin-top:.45em; flex-shrink:0;
 }
 #sp-prompt.on { opacity:1; }
 #sp-prompt span { animation:spblink 1.4s step-end infinite; }
@@ -210,36 +231,327 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 <button id="shop-button" class="ascii-btn" type="button">[ shop ]</button>
 <div id="shop-modal" aria-hidden="true">
   <section id="shop-panel" role="dialog" aria-modal="true" aria-label="stone upgrade shop">
+    <pre id="shop-frame"></pre>
     <div>
       <div class="shop-body">
         <button id="shop-prev" class="ascii-btn shop-arrow" type="button">&lt;</button>
-        <pre id="shop-art"></pre>
+        <div class="shop-center">
+          <pre id="shop-art"></pre>
+          <div class="shop-copy">
+            <div class="shop-head">
+              <span id="shop-name"></span>
+              <span id="shop-price"></span>
+            </div>
+            <div id="shop-desc"></div>
+            <div class="shop-actions">
+              <button id="shop-upgrade" class="ascii-btn" type="button">[ upgrade ]</button>
+              <button id="shop-close" class="ascii-btn" type="button">[ escape ]</button>
+            </div>
+            <div id="shop-status"></div>
+          </div>
+        </div>
         <button id="shop-next" class="ascii-btn shop-arrow" type="button">&gt;</button>
-      </div>
-      <div class="shop-copy">
-        <div class="shop-head">
-          <span id="shop-name"></span>
-          <span id="shop-price"></span>
-        </div>
-        <div id="shop-desc"></div>
-        <div class="shop-actions">
-          <button id="shop-upgrade" class="ascii-btn" type="button">[ upgrade ]</button>
-          <button id="shop-close" class="ascii-btn" type="button">[ escape ]</button>
-        </div>
-        <div id="shop-status"></div>
       </div>
     </div>
   </section>
 </div>
 <script>
 
+// ── ASCII asset system ────────────────────────────────────────────────
+// One visual source of truth. Runtime UI consumes this object through
+// render helpers, which keeps future in-game editing focused on data.
+const ASSET_PACK = {
+  meta: {
+    version: 1,
+    name: 'stone-skipping-game-core',
+  },
+  glyphs: {
+    button: { left: '[ ', right: ' ]' },
+    icons: {
+      win: '✓',
+      left: '<',
+      right: '>',
+    },
+    currency: 'plops',
+  },
+  components: {
+    frames: {
+      shop: {
+        tl: '╭', tr: '╮', bl: '╰', br: '╯',
+        h: '─', v: '│', fill: ' ',
+      },
+      shopRaster: '',
+    },
+    labels: {
+      shop: 'shop',
+      buy: 'Buy',
+      purchased: 'Purchased',
+      need: 'Need',
+      escape: 'escape',
+      night: 'night',
+      day: 'day',
+    },
+  },
+  raster: {
+    splashCover: '',
+    splashTitle: String.raw`                           ,,,,      ...    ...       ,,,,.     ..         .. .. ..   .....            ,,,,     ..   ..  .  ... ..    .. ..   ...     ..   ...     ..    ....         .. ..      .,,,,
+                       :?S*;;+?%S ?S?+;%SS?;+?#*  ;?S*;;+?S?;  :+%SS%;   ,+?S?;,;*SSS*;;++SS.      :?S*;;+?%S .;*SSS*;. ;SS?+; :+SSS%;:,+?SSS++*S%?;.;*SSS*;+%S%*,:+%SSS+::+%SSS+   ,+?S?;, .;?S?+;;+?S?
+                      :###:    +# **   S##?   ?+,S##+     ?##%,  +#S##S;   ,#,   ,###:   :,*.     :###,    *#.  ,###:  ;**,      S##?    +###   *###; .###+  .###%  ?##S    ;#%##S;   ,#:  :S##+     ,%#
+                       ?####S%*::      %##?     S##S      ,###%  ;S ;S##%; .#,   ,###*;;%#         ?####S%*::   :###+*SS,        S##?    +###:,;S#S?. .###*,:*##%:  ?##S    :# ;%##%;  #,  S##S        ,
+                    , .;*?S####+     %##?     S##S      ,###%  ;S   ;S##%;#,   ,###+,:*S        , .;*?S####+  :###+?##S+       S##?    +###;;+;,.   .###?;++:.    ?##S    :#   ;S##%;#, .###S    ;*%%%?;.
+                     ?#;     ?##%     S##?     :S##+     ?##%.  ;#     +S###,   .###;   . +%     ?#:     ?##%  ,###: :%###+.    S##?    +###         .###+         ?##S    ;#     +S###,  ;###*     ###+
+                     +S%?+;;+%%+    :+%SS%+:     ;?S*;;+?S?;  :+%S?+.   .+SS. .;*SSS?+;;+?S%     *S%?+;;+%%+ .;*SSS?;  ;%S#%+::+%SS%+:,;?SSS*;      ;+SSS?;,     :;%SSS+:,+?S?+.    +SS,   .+%S?+;;+%%*,
+                          .,,,,.      ..    ..        ,,,,.     ... ..           ..   ......          .,,,,.    ..   ..      .....    .. ..   ..      ..   ..      ..    ..... ..                ,,,,,`,
+  },
+  entities: {
+    stones: [
+      { char: '⬤', hollow: '◯', power: 0.98, vxDamp: 0.99, bounceDamp: 1.12, splashR: 0.50, note: 'big heavy round' },
+      { char: '●', hollow: '○', power: 1.00, vxDamp: 1.02, bounceDamp: 1.08, splashR: 0.33, note: 'small round' },
+      { char: '■', hollow: '□', power: 0.90, vxDamp: 0.84, bounceDamp: 1.00, splashR: 0.50, note: 'big heavy block' },
+      { char: '★', hollow: '☆', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88, splashR: 0.35, note: 'small angular' },
+      { char: '▲', hollow: '△', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88, splashR: 0.35, note: 'small angular' },
+      { char: '◆', hollow: '◇', power: 1.00, vxDamp: 0.98, bounceDamp: 0.88, splashR: 0.35, note: 'small flat diamond' },
+    ],
+    shopStones: [
+      {
+        id: 'wide-plop',
+        name: 'Wide Plop',
+        cost: 40,
+        desc: 'The stone lands with a wider wake. Useful when the last touch needs more presence.',
+        art: String.raw`         ~~~~~~~~~·
+      ~~·          ~~:
+    ~~               ~~:
+   ˙                   ~~:
+  ~:                    ~\
+ ::                      \\
+ ::                       :
+ ::                      ::
+ |:                      ::
+ ::~                    ·:|
+ : :~·                 ~~~
+  -·~~:~~           ·~~~/
+    :~~~\~·-~~~~~-~:~/~~
+      :~~~~~\~~~~~~/~
+         ··\~~~~~~~`
+      },
+      {
+        id: 'lucky-chance',
+        name: 'Lucky Chance',
+        cost: 55,
+        desc: 'One failed landing may correct itself by a single skip when the throw is close.',
+        art: String.raw`           ~.
+          /  \
+        ~/    ˙~
+   .·~~~·       ˙-~~~.
+   :                 ·
+    ~:             :~
+     ~:\          -~
+      :·           \
+     ::·    ·/\~~   :
+     .:~- ~~:  ~\\~~.
+     ·~~~˙         ~·`
+      },
+      {
+        id: 'red-bite',
+        name: 'Red Bite',
+        cost: 70,
+        desc: 'The aim line bites harder into the water and the first impact feels heavier.',
+        art: String.raw`       ~~~~\
+      ~:   ·~\
+    ~/        \
+   ~:          \
+  ~:            :
+ ~:             ~\
+ :·               :
+/~-               ~/
+~:~~~           /~/~
+ ~~\~~~~~~~~~~~~~~~
+  · ~~~~~~~~~~~~-`
+      },
+      {
+        id: 'hook-turn',
+        name: 'Hook Turn',
+        cost: 90,
+        desc: 'A crooked stone that keeps a little sideways pull after each bounce.',
+        art: String.raw`         ·~~~˙~-~
+       :~˙       ˙·~
+      :~            ~
+      :              ~
+     ::              :
+     |:              :
+      ~\·          /~~
+      -~\~~    /~~~~/
+       :~~~\~~\~~~~:
+          :~~~~~~~`
+      },
+      {
+        id: 'long-skim',
+        name: 'Long Skim',
+        cost: 120,
+        desc: 'Longer surface travel with a narrow wake. Strong, but less forgiving.',
+        art: String.raw`     ~-~-~--~-~~~~~~~-
+   ~-~ ·           ···~~
+  /                    ~|
+ :·                    ·::
+ ::                      :
+:::                      |
+:::                      :
+:::                      :
+::|                      :
+:::·                    ·:
+\:~:                    ·:
+·|\~:                  ··:
+ :: ~·\··            ··:|:
+ ˙~:~~~~~·-~~·~~~~~~~~·|/˙
+    -~~~~~-~~~~~~~~~-~-`
+      },
+      {
+        id: 'flat-run',
+        name: 'Flat Run',
+        cost: 150,
+        desc: 'Low fast skips that hold speed across the water before dropping.',
+        art: String.raw`                     ~·~-
+                  ·/··   \.
+                ·/         :.
+               :·            :
+            ·/·               ~:
+            /:                 ~:
+            \|:                ::
+             \~\              /:|
+              \~~\         /:~/·
+                \~~~:  ·:~~-~
+                  \~~~:~~~~
+                    :·|~~`
+      },
+    ],
+  },
+};
+
+function cloneAsset(value) {
+  return typeof structuredClone === 'function'
+    ? structuredClone(value)
+    : JSON.parse(JSON.stringify(value));
+}
+
+const ASSET_STORAGE_KEY = 'stone-skipping-game-asset-patch-v1';
+const SPLASH_COVER_BACKUP_KEY = 'stone-skipping-game-splash-cover-backup-v1';
+const SPLASH_COVER_LEGACY_BACKUP_KEYS = [
+  SPLASH_COVER_BACKUP_KEY,
+  'stone-skipping-game-splash-cover-reset-raw-2026-05-15',
+];
+let assets = cloneAsset(ASSET_PACK);
+
+function deepMergeAsset(base, patch) {
+  if (!patch || typeof patch !== 'object') return base;
+  for (const [key, value] of Object.entries(patch)) {
+    if (Array.isArray(value)) {
+      base[key] = value.map(item => (
+        item && typeof item === 'object' ? deepMergeAsset({}, item) : item
+      ));
+    } else if (value && typeof value === 'object') {
+      base[key] = deepMergeAsset(base[key] && typeof base[key] === 'object' ? base[key] : {}, value);
+    } else {
+      base[key] = value;
+    }
+  }
+  return base;
+}
+
+function readStoredAssetPatch() {
+  try {
+    const raw = localStorage.getItem(ASSET_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredAssetPatch(patch) {
+  try { localStorage.setItem(ASSET_STORAGE_KEY, JSON.stringify(patch)); } catch {}
+}
+
+function resetStoredSplashCoverFromQuery() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has('reset-cover') && !params.has('restore-cover')) return;
+  try {
+    const patch = readStoredAssetPatch();
+    if (params.has('restore-cover')) {
+      const backup = SPLASH_COVER_LEGACY_BACKUP_KEYS
+        .map(key => localStorage.getItem(key))
+        .find(value => value && value.trim());
+      if (!backup) return;
+      const nextPatch = patch && typeof patch === 'object' ? patch : {};
+      nextPatch.raster = nextPatch.raster && typeof nextPatch.raster === 'object' ? nextPatch.raster : {};
+      nextPatch.raster.splashCover = backup;
+      writeStoredAssetPatch(nextPatch);
+      return;
+    }
+    if (!patch?.raster?.splashCover) return;
+    localStorage.setItem(SPLASH_COVER_BACKUP_KEY, patch.raster.splashCover);
+    delete patch.raster.splashCover;
+    writeStoredAssetPatch(patch);
+  } catch {}
+}
+
+resetStoredSplashCoverFromQuery();
+assets = deepMergeAsset(assets, readStoredAssetPatch());
+
+function renderButton(label) {
+  const b = assets.glyphs.button;
+  return `${b.left}${label}${b.right}`;
+}
+
+function drawFrame(frame, cols, rows) {
+  const w = Math.max(2, cols | 0);
+  const h = Math.max(2, rows | 0);
+  const top = frame.tl + frame.h.repeat(w - 2) + frame.tr;
+  const mid = frame.v + (frame.fill || ' ').repeat(w - 2) + frame.v;
+  const bot = frame.bl + frame.h.repeat(w - 2) + frame.br;
+  return [top, ...Array(Math.max(0, h - 2)).fill(mid), bot].join('\n');
+}
+
+function applyAssetPatch(patch, options = {}) {
+  assets = deepMergeAsset(cloneAsset(assets), patch);
+  if (options.persist) writeStoredAssetPatch(assets);
+  syncAssetConsumers();
+}
+
+function resetAssets() {
+  assets = cloneAsset(ASSET_PACK);
+  try { localStorage.removeItem(ASSET_STORAGE_KEY); } catch {}
+  syncAssetConsumers();
+}
+
+function syncAssetConsumers() {
+  if (typeof STONE_TYPES !== 'undefined') STONE_TYPES = assets.entities.stones;
+  if (typeof SHOP_STONES !== 'undefined') SHOP_STONES = assets.entities.shopStones;
+  if (typeof ACHIEVABLE !== 'undefined') ACHIEVABLE = computeAchievable();
+  if (typeof shopPurchased !== 'undefined') {
+    while (shopPurchased.length < assets.entities.shopStones.length) shopPurchased.push(false);
+    shopPurchased.length = assets.entities.shopStones.length;
+    if (typeof shopIndex !== 'undefined') shopIndex = Math.min(shopIndex, Math.max(0, shopPurchased.length - 1));
+  }
+  syncChromeLabels();
+  renderShopFrame();
+  if (typeof updateShop === 'function') updateShop();
+  if (typeof updateChallenge === 'function') updateChallenge();
+}
+
+window.StoneSkipAssets = {
+  get: () => cloneAsset(assets),
+  apply: applyAssetPatch,
+  save: patch => patch ? applyAssetPatch(patch, { persist: true }) : writeStoredAssetPatch(assets),
+  reset: resetAssets,
+  renderAll: syncAssetConsumers,
+};
+
 // Theme: real palette switch, not visual inversion.
-const THEME_KEY = 'stone-skip-theme';
+const THEME_KEY = 'stone-skipping-game-theme';
 const themeMeta = document.querySelector('meta[name="theme-color"]');
 function setTheme(theme) {
   const next = theme === 'day' ? 'day' : 'night';
   document.body.dataset.theme = next;
-  document.getElementById('theme-toggle').textContent = `[ ${next} ]`;
+  document.getElementById('theme-toggle').textContent = renderButton(assets.components.labels[next]);
   if (themeMeta) themeMeta.setAttribute('content', next === 'day' ? '#e6e6e6' : '#000000');
   try { localStorage.setItem(THEME_KEY, next); } catch {}
 }
@@ -247,6 +559,22 @@ setTheme(localStorage.getItem(THEME_KEY) || 'night');
 document.getElementById('theme-toggle').addEventListener('click', () => {
   setTheme(document.body.dataset.theme === 'day' ? 'night' : 'day');
 });
+
+function syncChromeLabels() {
+  const labels = assets.components.labels;
+  const themeToggle = document.getElementById('theme-toggle');
+  const shopButton = document.getElementById('shop-button');
+  const shopClose = document.getElementById('shop-close');
+  const shopPrev = document.getElementById('shop-prev');
+  const shopNext = document.getElementById('shop-next');
+  if (themeToggle) themeToggle.textContent = renderButton(labels[document.body.dataset.theme || 'night']);
+  if (shopButton) shopButton.textContent = renderButton(labels.shop);
+  if (shopClose) shopClose.textContent = renderButton(labels.escape);
+  if (shopPrev) shopPrev.textContent = assets.glyphs.icons.left;
+  if (shopNext) shopNext.textContent = assets.glyphs.icons.right;
+  const splashTitle = document.getElementById('sp-title');
+  if (splashTitle && assets.raster?.splashTitle) splashTitle.textContent = assets.raster.splashTitle;
+}
 
 // ── sim step: fixed like Python (t += 0.033 per frame) ────────────────
 const DT = 0.033;
@@ -500,6 +828,8 @@ const $challenge  = document.getElementById('challenge');
 const $fishLayer  = document.getElementById('fish-layer');
 const $shopButton = document.getElementById('shop-button');
 const $shopModal  = document.getElementById('shop-modal');
+const $shopPanel  = document.getElementById('shop-panel');
+const $shopFrame  = document.getElementById('shop-frame');
 const $shopArt    = document.getElementById('shop-art');
 const $shopName   = document.getElementById('shop-name');
 const $shopPrice  = document.getElementById('shop-price');
@@ -513,7 +843,7 @@ const $shopClose  = document.getElementById('shop-close');
 function updateChallenge() {
   if (!target) return;
   if (challengeWon && (stone.state === 'sinking' || stone.state === 'dead')) {
-    $challenge.innerHTML = `<span class="ch-hit">✓</span> <span class="ch-hit">${target}</span>`;
+    $challenge.innerHTML = `<span class="ch-hit">${assets.glyphs.icons.win}</span> <span class="ch-hit">${target}</span>`;
     return;
   }
   const cur = (stone.state === 'flying' && stone.skipN > 0) ? stone.skipN : null;
@@ -647,125 +977,12 @@ function ringChar(dxR, dyR, env, x, y) {
   return nx < 0.62 ? '·' : '˙';
 }
 
-// ── Stone types ───────────────────────────────────────────────────────
+// ── Stone asset views ────────────────────────────────────────────────
 // power: launch velocity multiplier (heavy stones fly shorter)
 // vxDamp: applied to VX_DAMP each bounce (>1 = keeps speed better = round; <1 = loses speed = angular)
 // bounceDamp: applied to BOUNCE_DAMP on Y-flip (>1 = bounces higher = round; <1 = dies sooner = angular)
-const STONE_TYPES = [
-  { char: '⬤', hollow: '◯', power: 0.98, vxDamp: 0.99, bounceDamp: 1.12, splashR: 0.50 }, // big heavy round
-  { char: '●', hollow: '○', power: 1.00, vxDamp: 1.02, bounceDamp: 1.08, splashR: 0.33 }, // small round
-  { char: '■', hollow: '□', power: 0.90, vxDamp: 0.84, bounceDamp: 1.00, splashR: 0.50 }, // big heavy block
-  { char: '★', hollow: '☆', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88, splashR: 0.35 }, // small angular
-  { char: '▲', hollow: '△', power: 1.00, vxDamp: 0.95, bounceDamp: 0.88, splashR: 0.35 }, // small angular
-  { char: '◆', hollow: '◇', power: 1.00, vxDamp: 0.98, bounceDamp: 0.88, splashR: 0.35 }, // small flat diamond
-];
-
-const SHOP_STONES = [
-  {
-    name: 'Wide Plop',
-    cost: 40,
-    desc: 'The stone lands with a wider wake. Useful when the last touch needs more presence.',
-    art: String.raw`         ~~~~~~~~~·
-      ~~·          ~~:
-    ~~               ~~:
-   ˙                   ~~:
-  ~:                    ~\
- ::                      \\
- ::                       :
- ::                      ::
- |:                      ::
- ::~                    ·:|
- : :~·                 ~~~
-  -·~~:~~           ·~~~/
-    :~~~\~·-~~~~~-~:~/~~
-      :~~~~~\~~~~~~/~
-         ··\~~~~~~~`
-  },
-  {
-    name: 'Lucky Chance',
-    cost: 55,
-    desc: 'One failed landing may correct itself by a single skip when the throw is close.',
-    art: String.raw`           ~.
-          /  \
-        ~/    ˙~
-   .·~~~·       ˙-~~~.
-   :                 ·
-    ~:             :~
-     ~:\          -~
-      :·           \
-     ::·    ·/\~~   :
-     .:~- ~~:  ~\\~~.
-     ·~~~˙         ~·`
-  },
-  {
-    name: 'Red Bite',
-    cost: 70,
-    desc: 'The aim line bites harder into the water and the first impact feels heavier.',
-    art: String.raw`       ~~~~\
-      ~:   ·~\
-    ~/        \
-   ~:          \
-  ~:            :
- ~:             ~\
- :·               :
-/~-               ~/
-~:~~~           /~/~
- ~~\~~~~~~~~~~~~~~~
-  · ~~~~~~~~~~~~-`
-  },
-  {
-    name: 'Hook Turn',
-    cost: 90,
-    desc: 'A crooked stone that keeps a little sideways pull after each bounce.',
-    art: String.raw`         ·~~~˙~-~
-       :~˙       ˙·~
-      :~            ~
-      :              ~
-     ::              :
-     |:              :
-      ~\·          /~~
-      -~\~~    /~~~~/
-       :~~~\~~\~~~~:
-          :~~~~~~~`
-  },
-  {
-    name: 'Long Skim',
-    cost: 120,
-    desc: 'Longer surface travel with a narrow wake. Strong, but less forgiving.',
-    art: String.raw`     ~-~-~--~-~~~~~~~-
-   ~-~ ·           ···~~
-  /                    ~|
- :·                    ·::
- ::                      :
-:::                      |
-:::                      :
-:::                      :
-::|                      :
-:::·                    ·:
-\:~:                    ·:
-·|\~:                  ··:
- :: ~·\··            ··:|:
- ˙~:~~~~~·-~~·~~~~~~~~·|/˙
-    -~~~~~-~~~~~~~~~-~-`
-  },
-  {
-    name: 'Flat Run',
-    cost: 150,
-    desc: 'Low fast skips that hold speed across the water before dropping.',
-    art: String.raw`                     ~·~-
-                  ·/··   \.
-                ·/         :.
-               :·            :
-            ·/·               ~:
-            /:                 ~:
-            \|:                ::
-             \~\              /:|
-              \~~\         /:~/·
-                \~~~:  ·:~~-~
-                  \~~~:~~~~
-                    :·|~~`
-  },
-];
+let STONE_TYPES = assets.entities.stones;
+let SHOP_STONES = assets.entities.shopStones;
 // ── Challenge ─────────────────────────────────────────────────────────
 function computeAchievable() {
   const s = new Set();
@@ -780,7 +997,7 @@ function computeAchievable() {
   }
   return s;
 }
-const ACHIEVABLE = computeAchievable();
+let ACHIEVABLE = computeAchievable();
 
 let target      = 0;
 let challengeWon = false;
@@ -1029,7 +1246,7 @@ function updateStone(dt) {
 }
 
 function updateScore() {
-  $score.textContent = `${totalWins} plops`;
+  $score.textContent = `${totalWins} ${assets.glyphs.currency}`;
   if ($shopModal.classList.contains('open')) updateShop();
 }
 
@@ -1051,22 +1268,43 @@ function formatShopArt(art) {
   }).join('\n');
 }
 
+function renderShopFrame() {
+  if (!$shopFrame || !$shopPanel) return;
+  const raster = assets.components.frames.shopRaster;
+  if (raster && raster.trim()) {
+    $shopFrame.textContent = raster.replace(/\r/g, '');
+    return;
+  }
+  const rect = $shopPanel.getBoundingClientRect();
+  const cw = CW || 8.4;
+  const ch = CH || 16.52;
+  const cols = Math.max(24, Math.floor(rect.width / cw));
+  const rows = Math.max(8, Math.floor(rect.height / ch));
+  $shopFrame.textContent = drawFrame(assets.components.frames.shop, cols, rows);
+}
+
 function updateShop() {
   const item = SHOP_STONES[shopIndex];
+  if (!item) return;
   const missing = Math.max(0, item.cost - totalWins);
-  const purchased = shopPurchased[shopIndex];
+  const purchased = !!shopPurchased[shopIndex];
   $shopArt.textContent = formatShopArt(item.art);
   $shopName.textContent = item.name;
-  $shopPrice.textContent = `${item.cost} plops`;
+  $shopPrice.textContent = `${item.cost} ${assets.glyphs.currency}`;
   $shopDesc.textContent = item.desc;
-  $shopUpgrade.textContent = purchased ? '[ Purchased ]' : (missing ? `[ Need ${missing} plops ]` : '[ Buy ]');
+  $shopUpgrade.textContent = purchased
+    ? renderButton(assets.components.labels.purchased)
+    : renderButton(missing
+      ? `${assets.components.labels.need} ${missing} ${assets.glyphs.currency}`
+      : assets.components.labels.buy);
   $shopStatus.textContent = '';
 }
 
 function openShop() {
-  updateShop();
   $shopModal.classList.add('open');
   $shopModal.setAttribute('aria-hidden', 'false');
+  renderShopFrame();
+  updateShop();
 }
 
 function closeShop() {
@@ -1518,11 +1756,14 @@ if ('serviceWorker' in navigator) {
 
 // ── Init ──────────────────────────────────────────────────────────────
 initLayout();
+syncChromeLabels();
+renderShopFrame();
 pickTarget();
 spawnStone();
 updateScore();
 updateChallenge();
-window.addEventListener('resize', () => { initLayout(); spawnStone(); drops = []; fish = []; fishBubbles = []; fishBuf = null; calmTimer = 0; updateChallenge(); });
+if (new URLSearchParams(location.search).has('shop')) requestAnimationFrame(openShop);
+window.addEventListener('resize', () => { initLayout(); renderShopFrame(); spawnStone(); drops = []; fish = []; fishBubbles = []; fishBuf = null; calmTimer = 0; updateChallenge(); });
 function startGame() { requestAnimationFrame(frame); }
 
 // ── Splash ────────────────────────────────────────────────────────────
@@ -1594,14 +1835,213 @@ document.addEventListener('DOMContentLoaded', function() {
   const spStage  = document.getElementById('sp-stage');
   const spTitle  = document.getElementById('sp-title');
   const spPrompt = document.getElementById('sp-prompt');
+  window.StoneSkipSplashCoverSource = SP_ILLUS.replace(/\r/g, '');
+  spTitle.textContent = assets.raster.splashTitle;
   const DELAY    = 22;
 
-  SP_ILLUS.split('\n').forEach(ln => {
+  function splashHash(x, y, salt = 0) {
+    let n = (x * 374761393 + y * 668265263 + salt * 1442695041) >>> 0;
+    n ^= n << 13; n ^= n >>> 17; n ^= n << 5;
+    return (n >>> 0) / 4294967295;
+  }
+
+  function edgeDust(ch, strength) {
+    const ramp = ' .,:;+*?S#@';
+    const idx = Math.max(1, ramp.indexOf(ch));
+    return ramp[Math.max(1, Math.min(idx - strength, 5))] || '.';
+  }
+
+  function featherSplashArt(raw) {
+    const src = raw.replace(/\r/g, '').split('\n');
+    const TARGET_W = 270;
+    const rows = src.map(line => line.padEnd(TARGET_W, ' ').split(''));
+    const H = rows.length;
+    const out = rows.map(row => row.slice());
+
+    const bounds = rows.map(line => {
+      let L = 0; while (L < line.length && line[L] === ' ') L++;
+      let R = line.length - 1; while (R >= 0 && line[R] === ' ') R--;
+      return (L < line.length && L <= R) ? { L, R } : null;
+    });
+
+    // Large-amplitude slow waves: wide organic silhouette, not rectangular
+    function waveReach(y, phase) {
+      return Math.max(6, Math.round(
+        40
+        + Math.sin(y * 0.087 + phase)       * 18
+        + Math.sin(y * 0.153 + phase + 2.3) * 12
+        + Math.sin(y * 0.311 + phase + 0.8) *  5
+      ));
+    }
+
+    for (let y = 0; y < H; y++) {
+      const b = bounds[y];
+      if (!b) continue;
+      const leftReach  = waveReach(y, 0.0);
+      const rightReach = waveReach(y, Math.PI);
+      for (let d = 1; d <= leftReach; d++) {
+        const lx = b.L - d;
+        if (lx < 0 || out[y][lx] !== ' ') continue;
+        const p = Math.pow(1 - d / (leftReach + 1), 3.5);
+        if (splashHash(lx, y, 7) < p * 0.55)
+          out[y][lx] = edgeDust(rows[y][b.L], Math.max(1, d * 4.0 / leftReach));
+      }
+      for (let d = 1; d <= rightReach; d++) {
+        const rx = b.R + d;
+        if (rx >= TARGET_W || out[y][rx] !== ' ') continue;
+        const p = Math.pow(1 - d / (rightReach + 1), 3.5);
+        if (splashHash(rx, y, 11) < p * 0.55)
+          out[y][rx] = edgeDust(rows[y][b.R], Math.max(1, d * 4.0 / rightReach));
+      }
+    }
+
+    const VREACH = 10;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < TARGET_W; x++) {
+        if (out[y][x] !== ' ') continue;
+        for (let dy = 1; dy <= VREACH; dy++) {
+          const ny = y - dy; if (ny < 0) break;
+          if (rows[ny][x] !== ' ') {
+            const p = Math.pow(1 - dy / (VREACH + 1), 2.5);
+            if (splashHash(x, y, 17) < p * 0.17) out[y][x] = edgeDust(rows[ny][x], 3 + dy * 0.3);
+            break;
+          }
+        }
+        if (out[y][x] !== ' ') continue;
+        for (let dy = 1; dy <= VREACH; dy++) {
+          const ny = y + dy; if (ny >= H) break;
+          if (rows[ny][x] !== ' ') {
+            const p = Math.pow(1 - dy / (VREACH + 1), 2.5);
+            if (splashHash(x, y, 19) < p * 0.13) out[y][x] = edgeDust(rows[ny][x], 3 + dy * 0.3);
+            break;
+          }
+        }
+      }
+    }
+
+    return out.map(row => row.join('').trimEnd()).join('\n');
+  }
+
+  function centerSplashCoverArt(raw, targetCols = 300) {
+    const lines = raw.replace(/\r/g, '').split('\n');
+    const width = Math.max(0, ...lines.map(line => line.length));
+    const target = Math.max(targetCols, width);
+    return lines.map(line => {
+      const clean = line.padEnd(width, ' ');
+      const pad = target - width;
+      return ' '.repeat(Math.floor(pad / 2)) + clean + ' '.repeat(Math.ceil(pad / 2));
+    }).join('\n');
+  }
+
+  function centerSplashInk(raw, targetCols = 300) {
+    const lines = raw.replace(/\r/g, '').split('\n');
+    const sourceW = Math.max(1, ...lines.map(line => line.length));
+    const source = lines.map(line => line.padEnd(sourceW, ' '));
+    const xs = [];
+
+    source.forEach(line => {
+      for (let x = 0; x < line.length; x++) {
+        if (line[x] === ' ') continue;
+        xs.push(x);
+      }
+    });
+
+    if (!xs.length) return centerSplashCoverArt(raw, targetCols);
+
+    const target = Math.max(targetCols, sourceW);
+    xs.sort((a, b) => a - b);
+    const q = p => xs[Math.max(0, Math.min(xs.length - 1, Math.floor(xs.length * p)))];
+    const denseLeft = q(0.06);
+    const denseRight = q(0.94);
+    const denseCenter = (denseLeft + denseRight + 1) / 2;
+    const massCenter = xs.reduce((sum, x) => sum + x, 0) / xs.length;
+    const inkCenter = denseCenter * 0.72 + massCenter * 0.28;
+    const shift = Math.round(target / 2 - inkCenter) - 16;
+
+    return source.map(line => {
+      const row = Array(target).fill(' ');
+      for (let x = 0; x < line.length; x++) {
+        const nx = x + shift;
+        if (nx >= 0 && nx < target) row[nx] = line[x];
+      }
+      return row.join('').trimEnd();
+    }).join('\n');
+  }
+
+  function trimSplashVertical(raw, padRows = 1) {
+    const lines = raw.replace(/\r/g, '').split('\n');
+    let top = 0;
+    let bottom = lines.length - 1;
+    while (top <= bottom && !lines[top].trim()) top++;
+    while (bottom >= top && !lines[bottom].trim()) bottom--;
+    if (top > bottom) return '';
+    const pad = Array(padRows).fill('');
+    return [...pad, ...lines.slice(top, bottom + 1), ...pad].join('\n');
+  }
+
+  function shiftSplashArt(raw, cols = 0) {
+    const pad = ' '.repeat(Math.max(0, cols | 0));
+    return raw.replace(/\r/g, '').split('\n').map(line => pad + line).join('\n');
+  }
+
+  function splashTextSize(lines) {
+    return {
+      cols: Math.max(1, ...lines.map(line => line.length)),
+      rows: Math.max(1, lines.length),
+    };
+  }
+
+  function measureSplashMonoRatio() {
+    const probe = document.createElement('span');
+    probe.textContent = 'M'.repeat(100);
+    probe.style.cssText =
+      'position:fixed;left:-9999px;top:-9999px;visibility:hidden;' +
+      'font-family:"Courier New",Courier,monospace;font-size:10px;font-weight:500;' +
+      'line-height:1.15;white-space:pre;letter-spacing:0;';
+    document.body.appendChild(probe);
+    const rect = probe.getBoundingClientRect();
+    probe.remove();
+    return {
+      charW: Math.max(0.5, rect.width / 100 / 10),
+      lineH: 1.15,
+    };
+  }
+
+  function fitSplashLayout(stageLines) {
+    const stageSize = splashTextSize(stageLines);
+    const titleLines = spTitle.textContent.replace(/\r/g, '').split('\n');
+    const titleSize = splashTextSize(titleLines);
+    const maxCols = Math.max(stageSize.cols, titleSize.cols);
+    const metrics = measureSplashMonoRatio();
+    const promptRows = 1.8;
+    const verticalEms = (stageSize.rows + titleSize.rows) * metrics.lineH + 0.12 + 0.45 + promptRows;
+    const fontByWidth = window.innerWidth * 0.94 / (maxCols * metrics.charW);
+    const fontByHeight = window.innerHeight * 0.92 / verticalEms;
+    const fontSize = Math.max(3.5, Math.min(12, fontByWidth, fontByHeight));
+
+    document.documentElement.style.setProperty('--splash-font-size', `${fontSize}px`);
+    document.documentElement.style.setProperty('--splash-stage-width', `${stageSize.cols}ch`);
+    spTitle.style.width = `${titleSize.cols}ch`;
+  }
+
+  const splashCoverAsset = assets.raster?.splashCover;
+  const hasCustomSplashCover = Boolean(splashCoverAsset && splashCoverAsset.trim());
+  const splashCoverArtRaw = hasCustomSplashCover
+    ? splashCoverAsset.replace(/\r/g, '')
+    : SP_ILLUS.replace(/\r/g, '');
+  const splashCoverArt = hasCustomSplashCover
+    ? shiftSplashArt(trimSplashVertical(splashCoverArtRaw), 8)
+    : centerSplashInk(trimSplashVertical(splashCoverArtRaw));
+  const splashCoverLines = splashCoverArt.split('\n');
+
+  splashCoverLines.forEach(ln => {
     const el = document.createElement('span');
     el.className = 'spln';
     el.textContent = ln;
     spStage.appendChild(el);
   });
+  fitSplashLayout(splashCoverLines);
+  window.addEventListener('resize', () => fitSplashLayout(splashCoverLines));
 
   const spSpans = spStage.querySelectorAll('.spln');
   const spTotal = spSpans.length * DELAY;
@@ -1862,14 +2302,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div id="splash">
   <pre id="sp-stage"></pre>
-  <pre id="sp-title">                                                                                                                                                                                                                            
-        ,::::;;;:.     .:;;;++:.      .;;;;;;;..:::::.  ,;:,       ,;;;++,  :::::.  .;:: .::::, ::::;;;:, .:::;;;;:. ,::::, ,:::     ,:::.   .:;;;;;;:.         .;+;;;;;:       .;.      :::;.       :::: ,:::;;;;;         
-        .:@@*,:?@@,   *#%:,.,;S#?.  :%#*:,.,:S+ ,#@%. .+%+,.      *@;..,*%  .%@#.  ;%?:. .:@@*. .?@@:,+@@+ ,@@?,:%@#..;@@;. .*@@S,   .+#.  .?#%;,..,;#;       :%#*:,.,,;#.      S@S.     .?@@S.     ?@@%. .+@@;,::%         
-         .@@:  ;@%.  ?@S      .#@? :@@;      ..  %@* +*;.        .@@+,.      *@S :?+.     .#@:   +@S  .#@;  S@+  +@S. ,@@,   +?;@@?.  :%  .S@?       .       :@@;       .      ?*%@%      **?@S.   ?*%@*   :@#.  :          
-         ,@@:;S#:    #@?       %@# *@#.          S@%%@%.          ,?S##@#?.  *@S?@#,      .@@;   +@S,;*+,   #@+:+*;   :@@:   *? .?@@+ :%  :@@:    .,. .      *@#.    ... .    *% ,#@?     ?* %@S. ?* S@*   ;@@*+*#.         
-         .@@: *@S:   ?@#.      #@+ ,@@*          %@*.+@@?.        ,    ,S@+  *@S ;#@%,    .#@:   +@S        S@+       ,@@,   +?   :S@S?%  .S@%    ,:S#?.     ,@@*    ,;##+   ;S+++*#@*    **  %@%%*  S@*   ;@#.  , .        
-        .:@@+. :@@*, .*#S;,.,:%S+   ,%@S+:,,,;, ,#@%. .*@@?,     .#+,..:S%. .%@#.  +@@%:..:@@*. .?@@,.     ,@@?.     .;@@;. .?%.    ;#@S   .?#S;,..,#@*       :%@%;,..:@@: .;@:    +@@*. .%%.  %@* .,#@%.  +@@;::,?+        
-        ,::::,  .;;:   .:++;;;:       .;+++;;:..:::::   ,;;:.     :++;;;,   :::::.  .;;;..::::, :::::,    .:::::     ,::::, ,:::      ;;     .:++;;;:,.         .;++;;;:,  ,;::.  .:::;: :::,  .:  .:::::  :::;;;;;.        </pre>
+  <pre id="sp-title"></pre>
   <div id="sp-prompt"><span>·</span> press any key <span>·</span></div>
 </div>
 </body>

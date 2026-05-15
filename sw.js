@@ -1,8 +1,8 @@
-const CACHE = 'stone-skip-v27';
+const CACHE = 'stone-skipping-game-v43';
 const FILES = [
   './',
   './index.html',
-  './stone_challenge.html',
+  './stone-skipping-game.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -21,7 +21,18 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  const request = e.request;
+  const accept = request.headers.get('accept') || '';
+  const isPageRequest = request.mode === 'navigate' || accept.includes('text/html');
+
+  if (isPageRequest) {
+    e.respondWith(
+      fetch(request).catch(() => caches.match(request))
+    );
+    return;
+  }
+
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
+    caches.match(request).then(r => r || fetch(request))
   );
 });
