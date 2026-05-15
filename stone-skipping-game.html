@@ -174,7 +174,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   text-shadow:.35px 0 currentColor;
 }
 .shop-copy {
-  width:100%; text-align:left;
+  width:min(100%, 430px); text-align:left;
   color:var(--shop-strong); line-height:1.35;
 }
 .shop-head {
@@ -182,7 +182,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   white-space:nowrap; margin-bottom:10px;
 }
 #shop-name, #shop-price { font-size:17px }
-#shop-desc { color:var(--shop-muted); min-height:56px }
+#shop-desc { color:var(--shop-muted); min-height:56px; white-space:normal; overflow-wrap:break-word }
 .shop-actions {
   margin-top:18px; display:flex; justify-content:space-between; gap:24px;
 }
@@ -1272,9 +1272,23 @@ function renderShopFrame() {
   if (!$shopFrame || !$shopPanel) return;
   const raster = assets.components.frames.shopRaster;
   if (raster && raster.trim()) {
-    $shopFrame.textContent = raster.replace(/\r/g, '');
+    const clean = raster.replace(/\r/g, '');
+    const lines = clean.split('\n');
+    const cols = Math.max(24, ...lines.map(line => line.length));
+    const rows = Math.max(8, lines.length);
+    const cw = CW || 8.4;
+    const ch = CH || 16.52;
+    $shopPanel.style.width = `${cols * cw}px`;
+    $shopPanel.style.height = `${rows * ch}px`;
+    $shopPanel.style.maxWidth = '88vw';
+    $shopPanel.style.maxHeight = '78vh';
+    $shopFrame.textContent = clean;
     return;
   }
+  $shopPanel.style.width = '';
+  $shopPanel.style.height = '';
+  $shopPanel.style.maxWidth = '';
+  $shopPanel.style.maxHeight = '';
   const rect = $shopPanel.getBoundingClientRect();
   const cw = CW || 8.4;
   const ch = CH || 16.52;
