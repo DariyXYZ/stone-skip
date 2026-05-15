@@ -478,9 +478,16 @@ function upgradeStoredAssetPatch(patch) {
 
 function resetStoredSplashCoverFromQuery() {
   const params = new URLSearchParams(location.search);
-  if (!params.has('reset-cover') && !params.has('restore-cover')) return;
+  if (!params.has('reset-cover') && !params.has('restore-cover') && !params.has('reset-shop-stones')) return;
   try {
     const patch = readStoredAssetPatch();
+    if (params.has('reset-shop-stones')) {
+      const nextPatch = patch && typeof patch === 'object' ? patch : {};
+      nextPatch.meta = deepMergeAsset(cloneAsset(nextPatch.meta || {}), ASSET_PACK.meta);
+      nextPatch.entities = nextPatch.entities && typeof nextPatch.entities === 'object' ? nextPatch.entities : {};
+      nextPatch.entities.shopStones = cloneAsset(ASSET_PACK.entities.shopStones);
+      writeStoredAssetPatch(nextPatch);
+    }
     if (params.has('restore-cover')) {
       const backup = SPLASH_COVER_LEGACY_BACKUP_KEYS
         .map(key => localStorage.getItem(key))
