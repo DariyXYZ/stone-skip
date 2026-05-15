@@ -130,9 +130,9 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 }
 #shop-modal.open { display:grid }
 #shop-panel {
-  width:min(88vw, 680px);
-  height:min(78vh, 540px);
-  min-height:430px;
+  width:min(90vw, 760px);
+  height:min(82vh, 600px);
+  min-height:520px;
   overflow:hidden;
   display:grid;
   position:relative;
@@ -152,16 +152,16 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   height:100%;
   display:flex;
   align-items:center;
-  padding:38px 50px 42px;
+  padding:58px 74px 62px;
 }
 .shop-body {
-  display:grid; grid-template-columns:40px minmax(0,1fr) 40px;
-  align-items:center; gap:16px;
+  display:grid; grid-template-columns:64px minmax(0,1fr) 64px;
+  align-items:center; gap:22px;
   width:100%;
 }
 .shop-center {
   display:flex; flex-direction:column;
-  align-items:center; gap:20px;
+  align-items:center; gap:34px;
   min-width:0;
 }
 .shop-arrow {
@@ -172,9 +172,12 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   white-space:pre;
   font-size:14px; line-height:1.05; color:var(--shop-strong);
   text-shadow:.35px 0 currentColor;
+  min-height:170px;
+  display:flex;
+  align-items:center;
 }
 .shop-copy {
-  width:min(100%, 430px); text-align:left;
+  width:min(100%, 460px); text-align:left;
   color:var(--shop-strong); line-height:1.35;
 }
 .shop-head {
@@ -184,7 +187,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 #shop-name, #shop-price { font-size:17px }
 #shop-desc { color:var(--shop-muted); min-height:56px; white-space:normal; overflow-wrap:break-word }
 .shop-actions {
-  margin-top:18px; display:flex; justify-content:space-between; gap:24px;
+  margin-top:24px; display:flex; justify-content:space-between; gap:40px;
 }
 #shop-status { display:none }
 
@@ -262,7 +265,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 // render helpers, which keeps future in-game editing focused on data.
 const ASSET_PACK = {
   meta: {
-    version: 1,
+    version: 2,
     name: 'stone-skipping-game-core',
   },
   glyphs: {
@@ -318,110 +321,100 @@ const ASSET_PACK = {
         name: 'Wide Plop',
         cost: 40,
         desc: 'The stone lands with a wider wake. Useful when the last touch needs more presence.',
-        art: String.raw`         ~~~~~~~~~·
-      ~~·          ~~:
-    ~~               ~~:
-   ˙                   ~~:
-  ~:                    ~\
- ::                      \\
- ::                       :
- ::                      ::
- |:                      ::
- ::~                    ·:|
- : :~·                 ~~~
-  -·~~:~~           ·~~~/
-    :~~~\~·-~~~~~-~:~/~~
-      :~~~~~\~~~~~~/~
-         ··\~~~~~~~`
+        art: String.raw`        .~~~~~~~~~~.
+     .~~            ~~.
+    .~                ~.
+   .~                  ~.
+  .:                    :.
+  ::                    ::
+  ::                    ::
+  ::                    ::
+  ':                    :'
+   :.                  .:
+    '~.              .~'
+      '~~.        .~~'
+         '~~~~~~~~'`
       },
       {
         id: 'lucky-chance',
         name: 'Lucky Chance',
         cost: 55,
         desc: 'One failed landing may correct itself by a single skip when the throw is close.',
-        art: String.raw`           ~.
-          /  \
-        ~/    ˙~
-   .·~~~·       ˙-~~~.
-   :                 ·
-    ~:             :~
-     ~:\          -~
-      :·           \
-     ::·    ·/\~~   :
-     .:~- ~~:  ~\\~~.
-     ·~~~˙         ~·`
+        art: String.raw`          .~~~~~~.
+       .~~      ~~.
+     .~~          ~~.
+    .~    .~~.      ~.
+   .:    /    \     :.
+   ::   :      :    ::
+   ::   :      :    ::
+   ':    \.__/     :'
+    '~.          .~'
+      '~~.    .~~'
+         '~~~~'`
       },
       {
         id: 'red-bite',
         name: 'Red Bite',
         cost: 70,
         desc: 'The aim line bites harder into the water and the first impact feels heavier.',
-        art: String.raw`       ~~~~\
-      ~:   ·~\
-    ~/        \
-   ~:          \
-  ~:            :
- ~:             ~\
- :·               :
-/~-               ~/
-~:~~~           /~/~
- ~~\~~~~~~~~~~~~~~~
-  · ~~~~~~~~~~~~-`
+        art: String.raw`       .~~~~~~~~~~~\
+     .~~            \
+    .~               \
+   .:                 :
+   ::                 ::
+   ::        .----.   ::
+   ::       /      \  ::
+   ':       \_____/  :'
+    '~.            .~'
+      '~~.      .~~'
+         '~~~~~~'`
       },
       {
         id: 'hook-turn',
         name: 'Hook Turn',
         cost: 90,
         desc: 'A crooked stone that keeps a little sideways pull after each bounce.',
-        art: String.raw`         ·~~~˙~-~
-       :~˙       ˙·~
-      :~            ~
-      :              ~
-     ::              :
-     |:              :
-      ~\·          /~~
-      -~\~~    /~~~~/
-       :~~~\~~\~~~~:
-          :~~~~~~~`
+        art: String.raw`        .~~~~~~~.
+     .~~         ~~.
+    .~             ~.
+   .:       __      :.
+   ::     .'  '.    ::
+   ::    /      \   ::
+   ':    \      /  :'
+    '~.   '.__.' .~'
+      '~~.    .~~'
+         '~~~~'`
       },
       {
         id: 'long-skim',
         name: 'Long Skim',
         cost: 120,
         desc: 'Longer surface travel with a narrow wake. Strong, but less forgiving.',
-        art: String.raw`     ~-~-~--~-~~~~~~~-
-   ~-~ ·           ···~~
-  /                    ~|
- :·                    ·::
- ::                      :
-:::                      |
-:::                      :
-:::                      :
-::|                      :
-:::·                    ·:
-\:~:                    ·:
-·|\~:                  ··:
- :: ~·\··            ··:|:
- ˙~:~~~~~·-~~·~~~~~~~~·|/˙
-    -~~~~~-~~~~~~~~~-~-`
+        art: String.raw`   .~~~~~~~~~~~~~~~~~~.
+ .~~                    ~~.
+.~                        ~.
+:                          :
+:                          :
+:      .------------.      :
+:     /              \     :
+'.    \______________/    .'
+  '~~.                .~~'
+     '~~~~~~~~~~~~~~~~'`
       },
       {
         id: 'flat-run',
         name: 'Flat Run',
         cost: 150,
         desc: 'Low fast skips that hold speed across the water before dropping.',
-        art: String.raw`                     ~·~-
-                  ·/··   \.
-                ·/         :.
-               :·            :
-            ·/·               ~:
-            /:                 ~:
-            \|:                ::
-             \~\              /:|
-              \~~\         /:~/·
-                \~~~:  ·:~~-~
-                  \~~~:~~~~
-                    :·|~~`
+        art: String.raw`      .----------------.
+   .~~                  ~~.
+ .~                        ~.
+:     .--------------.      :
+:    /                \     :
+:    \________________/     :
+'.                          .'
+  '~~.                  .~~'
+      '----------------'`
       },
     ],
   },
@@ -470,6 +463,19 @@ function writeStoredAssetPatch(patch) {
   try { localStorage.setItem(ASSET_STORAGE_KEY, JSON.stringify(patch)); } catch {}
 }
 
+function upgradeStoredAssetPatch(patch) {
+  if (!patch || typeof patch !== 'object') return patch;
+  const storedVersion = Number(patch.meta?.version) || 0;
+  if (storedVersion >= ASSET_PACK.meta.version) return patch;
+
+  const upgraded = cloneAsset(patch);
+  upgraded.meta = deepMergeAsset(cloneAsset(upgraded.meta || {}), ASSET_PACK.meta);
+  upgraded.entities = upgraded.entities && typeof upgraded.entities === 'object' ? upgraded.entities : {};
+  upgraded.entities.shopStones = cloneAsset(ASSET_PACK.entities.shopStones);
+  writeStoredAssetPatch(upgraded);
+  return upgraded;
+}
+
 function resetStoredSplashCoverFromQuery() {
   const params = new URLSearchParams(location.search);
   if (!params.has('reset-cover') && !params.has('restore-cover')) return;
@@ -494,7 +500,7 @@ function resetStoredSplashCoverFromQuery() {
 }
 
 resetStoredSplashCoverFromQuery();
-assets = deepMergeAsset(assets, readStoredAssetPatch());
+assets = deepMergeAsset(assets, upgradeStoredAssetPatch(readStoredAssetPatch()));
 
 function renderButton(label) {
   const b = assets.glyphs.button;
