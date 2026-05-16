@@ -1,9 +1,10 @@
-const CACHE = 'stone-skipping-game-v58';
+const CACHE = 'stone-skipping-game-v59';
 const FILES = [
   './',
   './index.html',
   './stone-skipping-game.html',
   './stone-skipping-shop-assets-editor.html',
+  './assets/stone-skipping-splash-cover.txt',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
