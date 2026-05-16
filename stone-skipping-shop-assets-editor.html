@@ -335,6 +335,7 @@ const redoEl = document.getElementById('redo-edit');
 const resetCurrentEl = document.getElementById('reset-current');
 const downloadPatchEl = document.getElementById('download-patch');
 const ASSET_STORAGE_KEY = 'stone-skipping-game-asset-patch-v1';
+const SPLASH_COVER_VERSION = 4;
 
 let assets = null;
 let assetRefs = [];
@@ -740,6 +741,11 @@ function renderButton(label) {
 
 function makePatch() {
   return {
+    meta: {
+      version: assets.meta?.version || 3,
+      name: assets.meta?.name || 'stone-skipping-game-core',
+      splashCoverVersion: SPLASH_COVER_VERSION,
+    },
     raster: {
       splashCover: assets.raster?.splashCover || '',
       splashTitle: assets.raster?.splashTitle || '',

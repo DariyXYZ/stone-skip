@@ -294,6 +294,7 @@ const ASSET_PACK = {
   meta: {
     version: 3,
     name: 'stone-skipping-game-core',
+    splashCoverVersion: 4,
   },
   glyphs: {
     button: { left: '[ ', right: ' ]' },
@@ -464,6 +465,7 @@ function cloneAsset(value) {
 }
 
 const ASSET_STORAGE_KEY = 'stone-skipping-game-asset-patch-v1';
+const SPLASH_COVER_VERSION = ASSET_PACK.meta.splashCoverVersion;
 const SPLASH_COVER_BACKUP_KEY = 'stone-skipping-game-splash-cover-backup-v1';
 const SPLASH_COVER_LEGACY_BACKUP_KEYS = [
   SPLASH_COVER_BACKUP_KEY,
@@ -500,16 +502,25 @@ function writeStoredAssetPatch(patch) {
   try { localStorage.setItem(ASSET_STORAGE_KEY, JSON.stringify(patch)); } catch {}
 }
 
+function rasterTextWidth(text) {
+  return Math.max(0, ...String(text || '').replace(/\r/g, '').split('\n').map(line => line.length));
+}
+
 function upgradeStoredAssetPatch(patch) {
   if (!patch || typeof patch !== 'object') return patch;
   const storedVersion = Number(patch.meta?.version) || 0;
-  if (storedVersion >= ASSET_PACK.meta.version) return patch;
 
   const upgraded = cloneAsset(patch);
   upgraded.meta = deepMergeAsset(cloneAsset(upgraded.meta || {}), ASSET_PACK.meta);
-  upgraded.entities = upgraded.entities && typeof upgraded.entities === 'object' ? upgraded.entities : {};
-  upgraded.entities.shopStones = cloneAsset(ASSET_PACK.entities.shopStones);
-  writeStoredAssetPatch(upgraded);
+  if (storedVersion < ASSET_PACK.meta.version) {
+    upgraded.entities = upgraded.entities && typeof upgraded.entities === 'object' ? upgraded.entities : {};
+    upgraded.entities.shopStones = cloneAsset(ASSET_PACK.entities.shopStones);
+  }
+  if (upgraded.raster?.splashCover && rasterTextWidth(upgraded.raster.splashCover) < 260) {
+    upgraded.raster.splashCover = '';
+    upgraded.meta.splashCoverVersion = SPLASH_COVER_VERSION;
+  }
+  if (JSON.stringify(upgraded) !== JSON.stringify(patch)) writeStoredAssetPatch(upgraded);
   return upgraded;
 }
 
@@ -2123,13 +2134,15 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   const splashCoverAsset = assets.raster?.splashCover;
-  const hasCustomSplashCover = Boolean(splashCoverAsset && splashCoverAsset.trim());
+  const hasCustomSplashCover = Boolean(
+    splashCoverAsset
+    && splashCoverAsset.trim()
+    && rasterTextWidth(splashCoverAsset) >= 260
+  );
   const splashCoverArtRaw = hasCustomSplashCover
     ? splashCoverAsset.replace(/\r/g, '')
     : SP_ILLUS.replace(/\r/g, '');
-  const splashCoverArt = hasCustomSplashCover
-    ? shiftSplashArt(trimSplashVertical(splashCoverArtRaw), 8)
-    : centerSplashInk(trimSplashVertical(splashCoverArtRaw));
+  const splashCoverArt = shiftSplashArt(trimSplashVertical(splashCoverArtRaw), 8);
   const splashCoverLines = splashCoverArt.split('\n');
 
   splashCoverLines.forEach(ln => {
