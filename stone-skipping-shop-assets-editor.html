@@ -192,7 +192,7 @@ iframe { display:none }
 </style>
 </head>
 <body>
-<iframe id="game-frame" src="stone-skipping-game.html?asset-editor=1&v=asset-editor-v2" title="Stone Skipping Game asset source"></iframe>
+<iframe id="game-frame" src="stone-skipping-game.html?asset-editor=1&v=asset-editor-v3" title="Stone Skipping Game asset source"></iframe>
 
 <main class="app">
   <aside class="rail">
@@ -247,7 +247,7 @@ iframe { display:none }
             <div id="brush-char" class="brush-readout">#</div>
           </div>
         </div>
-        <div class="hint">Drag on the big text field. Lines overwrite existing symbols.</div>
+        <div class="hint">Normal drag stays thin. Move very slowly or hold for denser symbols.</div>
       </div>
     </section>
   </aside>
@@ -336,6 +336,53 @@ const resetCurrentEl = document.getElementById('reset-current');
 const downloadPatchEl = document.getElementById('download-patch');
 const ASSET_STORAGE_KEY = 'stone-skipping-game-asset-patch-v1';
 const SPLASH_COVER_VERSION = 5;
+const SHOP_FRAME_VERSION = 2;
+const SHOP_FRAME_DEFAULT_COLS = 90;
+const SHOP_FRAME_DEFAULT_ROWS = 36;
+const SHOP_FRAME_LEGACY_COLS = 56;
+const SHOP_FRAME_LEGACY_ROWS = 28;
+const FALLBACK_SHOP_FRAME_RASTER = String.raw`
+
+
+
+       .:@@@+~._        _..~~.._.~˙˙·.·˙˙~._..~~.._        _.~+@@@:.
+  ·˙..˙         ˙·....·˙             +             ˙·....·˙         ˙..˙·
+
+
+
+
+      ><>
+
+
+
+
+
+
+                                                                   <><
+
+
+
+
+
+
+
+
+
+
+
+     ><>
+
+
+
+   .·*@@:.                           .                            .:@@*·.
+  +   ˙:@@@+.       _..~~.._..~~.._.╭@╮._..~~.._..~~.._        .+@@@:˙   +
+            ˙·....··       @       \@+@/       @       ··....·˙
+                                    ╰@╯
+
+
+
+
+`;
 
 let assets = null;
 let assetRefs = [];
@@ -351,6 +398,9 @@ let undoStack = [];
 let redoStack = [];
 let historyTimer = null;
 let beforeBrushValue = '';
+let gameBridgeState = null;
+let gameBridgeSeq = 0;
+const gameBridgePending = new Map();
 
 function clone(value) {
   return typeof structuredClone === 'function'
@@ -364,6 +414,44 @@ function api() {
   } catch {
     return null;
   }
+}
+
+window.addEventListener('message', event => {
+  const message = event.data;
+  if (!message || message.type !== 'stone-skip-assets-response') return;
+  gameBridgeState = message;
+  if (message.id && gameBridgePending.has(message.id)) {
+    gameBridgePending.get(message.id)(message);
+    gameBridgePending.delete(message.id);
+  }
+});
+
+function requestGameBridge(action = 'get', patch = null, timeout = 1800) {
+  return new Promise(resolve => {
+    let target = null;
+    try {
+      target = gameFrame.contentWindow;
+    } catch {}
+    if (!target) {
+      resolve(null);
+      return;
+    }
+    const id = `asset-editor-${Date.now()}-${++gameBridgeSeq}`;
+    const timer = setTimeout(() => {
+      gameBridgePending.delete(id);
+      resolve(null);
+    }, timeout);
+    gameBridgePending.set(id, message => {
+      clearTimeout(timer);
+      resolve(message);
+    });
+    target.postMessage({ type: 'stone-skip-assets-request', id, action, patch }, '*');
+  });
+}
+
+async function gameAssetsFromBridge(action = 'get', patch = null) {
+  const response = await requestGameBridge(action, patch);
+  return response?.assets ? clone(response.assets) : null;
 }
 
 function readStoredAssetPatch() {
@@ -412,13 +500,19 @@ function defaultAssetsFromGameFrame() {
       return gameFrame.contentWindow.StoneSkipDefaultAssets();
     }
   } catch {}
+  if (gameBridgeState?.defaults) return clone(gameBridgeState.defaults);
   return null;
 }
 
 function editorFallbackAssets() {
-  const stored = readStoredAssetPatch();
+  const stored = upgradeStoredAssetPatch(readStoredAssetPatch());
   const base = defaultAssetsFromGameFrame() || {
-    meta: { version: 1, name: 'Stone Skipping editor fallback' },
+    meta: {
+      version: 3,
+      name: 'Stone Skipping editor fallback',
+      splashCoverVersion: SPLASH_COVER_VERSION,
+      shopFrameVersion: SHOP_FRAME_VERSION,
+    },
     glyphs: {
       button: { left: '[ ', right: ' ]' },
       currency: 'plops',
@@ -426,7 +520,7 @@ function editorFallbackAssets() {
     components: {
       frames: {
         shop: { tl: '+', tr: '+', bl: '+', br: '+', h: '-', v: '|', fill: ' ' },
-        shopRaster: '',
+        shopRaster: FALLBACK_SHOP_FRAME_RASTER,
       },
       labels: {
         buy: 'Buy',
@@ -517,6 +611,49 @@ function drawFrame(frame, cols, rows) {
   return [top, ...Array(Math.max(0, h - 2)).fill(mid), bot].join('\n');
 }
 
+function isGeneratedShopFrameRaster(raster, cols, rows) {
+  const clean = String(raster || '').replace(/\r/g, '');
+  return clean === drawFrame({ tl: '+', tr: '+', bl: '+', br: '+', h: '-', v: '|', fill: ' ' }, cols, rows)
+    || clean === drawFrame(assets?.components?.frames?.shop || { tl: '+', tr: '+', bl: '+', br: '+', h: '-', v: '|', fill: ' ' }, cols, rows);
+}
+
+function upgradeStoredAssetPatch(patch) {
+  if (!patch || typeof patch !== 'object') return patch;
+  const upgraded = clone(patch);
+  upgraded.meta = deepMergeAsset(clone(upgraded.meta || {}), {
+    version: 3,
+    splashCoverVersion: SPLASH_COVER_VERSION,
+    shopFrameVersion: SHOP_FRAME_VERSION,
+  });
+
+  const frames = upgraded.components?.frames;
+  const hasShopRaster = frames && Object.prototype.hasOwnProperty.call(frames, 'shopRaster');
+  const storedShopFrameVersion = Number(patch.meta?.shopFrameVersion) || 0;
+  if (
+    hasShopRaster
+    && (
+      frames.shopRaster === ''
+      || storedShopFrameVersion < SHOP_FRAME_VERSION
+      || isGeneratedShopFrameRaster(frames.shopRaster, SHOP_FRAME_LEGACY_COLS, SHOP_FRAME_LEGACY_ROWS)
+      || isGeneratedShopFrameRaster(frames.shopRaster, SHOP_FRAME_DEFAULT_COLS, SHOP_FRAME_DEFAULT_ROWS)
+    )
+  ) {
+    delete frames.shopRaster;
+    upgraded.meta.shopFrameVersion = SHOP_FRAME_VERSION;
+    writeStoredAssetPatch(upgraded);
+  }
+  return upgraded;
+}
+
+function defaultShopFrameRasterFromGame() {
+  try {
+    return api()?.defaultShopFrameRaster?.() || '';
+  } catch {
+    return gameBridgeState?.defaultShopFrameRaster || '';
+  }
+  return gameBridgeState?.defaultShopFrameRaster || '';
+}
+
 function gameFormatShopArt(art) {
   const lines = art.replace(/\r/g, '').split('\n');
   while (lines.length && !lines[0].trim()) lines.shift();
@@ -560,7 +697,9 @@ function gameFormatShopArt(art) {
 }
 
 function defaultShopFrameRaster() {
-  return drawFrame(assets.components.frames.shop, 56, 28);
+  return defaultShopFrameRasterFromGame()
+    || FALLBACK_SHOP_FRAME_RASTER
+    || drawFrame(assets.components.frames.shop, SHOP_FRAME_DEFAULT_COLS, SHOP_FRAME_DEFAULT_ROWS);
 }
 
 function currentGameSplashCover() {
@@ -605,7 +744,11 @@ function normalizeSplashCoverCanvas() {
 }
 
 function ensureFrameRaster() {
-  if (!assets.components.frames.shopRaster) {
+  if (
+    !assets.components.frames.shopRaster
+    || isGeneratedShopFrameRaster(assets.components.frames.shopRaster, SHOP_FRAME_LEGACY_COLS, SHOP_FRAME_LEGACY_ROWS)
+    || isGeneratedShopFrameRaster(assets.components.frames.shopRaster, SHOP_FRAME_DEFAULT_COLS, SHOP_FRAME_DEFAULT_ROWS)
+  ) {
     assets.components.frames.shopRaster = defaultShopFrameRaster();
   }
 }
@@ -745,6 +888,7 @@ function makePatch() {
       version: assets.meta?.version || 3,
       name: assets.meta?.name || 'stone-skipping-game-core',
       splashCoverVersion: SPLASH_COVER_VERSION,
+      shopFrameVersion: assets.meta?.shopFrameVersion || SHOP_FRAME_VERSION,
     },
     raster: {
       splashCover: assets.raster?.splashCover || '',
@@ -800,29 +944,42 @@ function renderPreview() {
     `${renderButton(assets.components.labels.buy)}   ${renderButton(`${assets.components.labels.need} 00 ${assets.glyphs.currency}`)}`;
 }
 
-function loadAssets() {
+async function loadAssets() {
   const gameApi = api();
-  assets = gameApi ? gameApi.get() : editorFallbackAssets();
+  const bridgeAssets = gameApi ? null : await gameAssetsFromBridge();
+  assets = gameApi ? gameApi.get() : (bridgeAssets || editorFallbackAssets());
   buildRefs();
   selectAssetFromUrl();
   activeIndex = Math.min(activeIndex, assetRefs.length - 1);
   renderEditor();
-  setStatus(gameApi ? 'Loaded from game.' : 'Loaded local assets. Game API is not available, save still writes to game storage.');
+  setStatus(
+    gameApi || bridgeAssets
+      ? 'Loaded from game.'
+      : 'Loaded local fallback. Game asset bridge is not available.'
+  );
 }
 
-function saveAssets() {
+async function saveAssets() {
   syncFromUi();
   const gameApi = api();
   const patch = makePatch();
+  let savedThroughGame = !!gameApi;
   if (gameApi) {
     gameApi.save(patch);
-  } else if (!writeStoredAssetPatch(patch)) {
-    setStatus('Could not write to localStorage.', true);
-    return false;
+  } else {
+    const bridgeAssets = await gameAssetsFromBridge('save', patch);
+    if (bridgeAssets) {
+      assets = bridgeAssets;
+      buildRefs();
+      savedThroughGame = true;
+    } else if (!writeStoredAssetPatch(patch)) {
+      setStatus('Could not write to localStorage.', true);
+      return false;
+    }
   }
   const cover = assets.raster?.splashCover || '';
   const size = cover ? ` Splash cover: ${rasterWidth(cover)} cols x ${cover.split('\n').length} rows.` : '';
-  setStatus(`Saved to this browser.${size}`);
+  setStatus(`${savedThroughGame ? 'Saved to game.' : 'Saved to local fallback.'}${size}`);
   return true;
 }
 
@@ -830,18 +987,20 @@ function openGameWithCacheBust() {
   window.open(`stone-skipping-game.html?cover-v=${Date.now()}`, '_blank', 'noopener');
 }
 
-function saveAndOpenGame() {
-  if (saveAssets()) openGameWithCacheBust();
+async function saveAndOpenGame() {
+  if (await saveAssets()) openGameWithCacheBust();
 }
 
-function resetAssets() {
+async function resetAssets() {
   const gameApi = api();
   if (gameApi) {
     gameApi.reset();
+  } else if (await gameAssetsFromBridge('reset')) {
+    // Reset happened in the hidden game frame.
   } else {
     try { localStorage.removeItem(ASSET_STORAGE_KEY); } catch {}
   }
-  loadAssets();
+  await loadAssets();
   setStatus('Saved edits reset.');
 }
 
@@ -947,9 +1106,10 @@ function clamp01(value) {
 function smartBrushChar(energy, edge, salt) {
   if (brushChar === ' ') return ' ';
   if (!smartBrushEnabled) return brushChar;
-  const ramp = '.,:;+*?S#@';
+  const ramp = ' .,:;+-~*?%S#@';
   const jitter = ((salt * 1103515245 + 12345) >>> 0) / 4294967295;
-  const intensity = clamp01((energy ** 0.85) * 1.05 + edge * 0.08 + (jitter - 0.5) * 0.10 - 0.04);
+  const pressure = energy ** 1.7;
+  const intensity = clamp01(pressure * 0.92 + edge * 0.10 + (jitter - 0.5) * 0.08 - 0.10);
   return ramp[Math.max(0, Math.min(ramp.length - 1, Math.round(intensity * (ramp.length - 1))))];
 }
 
@@ -994,11 +1154,19 @@ function paintLine(from, to, energy = 1) {
 
 function brushEnergy(from, to, event) {
   const now = event.timeStamp || performance.now();
-  const dt = Math.max(8, now - lastBrushTime);
+  const dt = Math.max(12, now - lastBrushTime);
   const dist = Math.hypot(to.col - from.col, to.row - from.row);
+  if (dist < 0.08) {
+    lastBrushTime = now;
+    return clamp01(0.72 + dt / 180);
+  }
   const speed = dist / dt;
   lastBrushTime = now;
-  return clamp01(1 - (speed - 0.004) / 0.130);
+  if (speed <= 0.006) return 1;
+  if (speed <= 0.018) return 0.76 + (0.018 - speed) / 0.012 * 0.24;
+  if (speed <= 0.055) return 0.30 + (0.055 - speed) / 0.037 * 0.46;
+  if (speed <= 0.130) return 0.08 + (0.130 - speed) / 0.075 * 0.22;
+  return 0.04;
 }
 
 function buildPalette() {
@@ -1037,7 +1205,7 @@ canvasEl.addEventListener('pointerdown', event => {
   canvasEl.setPointerCapture(brushPointerId);
   lastBrushPoint = pointerToCell(event);
   lastBrushTime = event.timeStamp || performance.now();
-  paintLine(lastBrushPoint, lastBrushPoint, 1);
+  paintLine(lastBrushPoint, lastBrushPoint, 0.45);
 });
 canvasEl.addEventListener('pointermove', event => {
   if (!brushEnabled || brushPointerId !== event.pointerId || !lastBrushPoint) return;
@@ -1136,8 +1304,9 @@ buildPalette();
 updateHistoryButtons();
 function waitForGameApiOrFallback() {
   const startedAt = performance.now();
+  requestGameBridge();
   const wait = setInterval(() => {
-    if (api()) {
+    if (api() || gameBridgeState?.assets) {
       clearInterval(wait);
       loadAssets();
       return;
@@ -1149,6 +1318,7 @@ function waitForGameApiOrFallback() {
   }, 100);
 }
 gameFrame.addEventListener('load', () => {
+  requestGameBridge();
   waitForGameApiOrFallback();
 });
 setTimeout(() => {

@@ -295,6 +295,7 @@ const ASSET_PACK = {
     version: 3,
     name: 'stone-skipping-game-core',
     splashCoverVersion: 5,
+    shopFrameVersion: 2,
   },
   glyphs: {
     button: { left: '[ ', right: ' ]' },
@@ -311,7 +312,48 @@ const ASSET_PACK = {
         tl: '╭', tr: '╮', bl: '╰', br: '╯',
         h: '─', v: '│', fill: ' ',
       },
-      shopRaster: '',
+      shopRaster: String.raw`
+
+
+
+       .:@@@+~._        _..~~.._.~˙˙·.·˙˙~._..~~.._        _.~+@@@:.
+  ·˙..˙         ˙·....·˙             +             ˙·....·˙         ˙..˙·
+
+
+
+
+      ><>
+
+
+
+
+
+
+                                                                   <><
+
+
+
+
+
+
+
+
+
+
+
+     ><>
+
+
+
+   .·*@@:.                           .                            .:@@*·.
+  +   ˙:@@@+.       _..~~.._..~~.._.╭@╮._..~~.._..~~.._        .+@@@:˙   +
+            ˙·....··       @       \@+@/       @       ··....·˙
+                                    ╰@╯
+
+
+
+
+`,
     },
     labels: {
       shop: 'shop',
@@ -549,11 +591,16 @@ function cloneAsset(value) {
 
 const ASSET_STORAGE_KEY = 'stone-skipping-game-asset-patch-v1';
 const SPLASH_COVER_VERSION = ASSET_PACK.meta.splashCoverVersion;
+const SHOP_FRAME_VERSION = ASSET_PACK.meta.shopFrameVersion;
 const SPLASH_COVER_BACKUP_KEY = 'stone-skipping-game-splash-cover-backup-v1';
 const SPLASH_COVER_LEGACY_BACKUP_KEYS = [
   SPLASH_COVER_BACKUP_KEY,
   'stone-skipping-game-splash-cover-reset-raw-2026-05-15',
 ];
+const SHOP_FRAME_DEFAULT_COLS = 90;
+const SHOP_FRAME_DEFAULT_ROWS = 36;
+const SHOP_FRAME_LEGACY_COLS = 56;
+const SHOP_FRAME_LEGACY_ROWS = 28;
 let assets = cloneAsset(ASSET_PACK);
 
 function deepMergeAsset(base, patch) {
@@ -613,6 +660,20 @@ function upgradeStoredAssetPatch(patch) {
     delete upgraded.raster.splashCover;
     upgraded.meta.splashCoverVersion = SPLASH_COVER_VERSION;
   }
+  const storedShopRaster = upgraded.components?.frames?.shopRaster;
+  const storedShopFrameVersion = Number(patch.meta?.shopFrameVersion) || 0;
+  if (
+    (
+      Object.prototype.hasOwnProperty.call(upgraded.components?.frames || {}, 'shopRaster')
+      && storedShopFrameVersion < SHOP_FRAME_VERSION
+    )
+    || storedShopRaster === ''
+    || isGeneratedShopFrameRaster(storedShopRaster, SHOP_FRAME_LEGACY_COLS, SHOP_FRAME_LEGACY_ROWS)
+    || isGeneratedShopFrameRaster(storedShopRaster, SHOP_FRAME_DEFAULT_COLS, SHOP_FRAME_DEFAULT_ROWS)
+  ) {
+    delete upgraded.components.frames.shopRaster;
+    upgraded.meta.shopFrameVersion = SHOP_FRAME_VERSION;
+  }
   if (JSON.stringify(upgraded) !== JSON.stringify(patch)) writeStoredAssetPatch(upgraded);
   return upgraded;
 }
@@ -664,6 +725,25 @@ function drawFrame(frame, cols, rows) {
   return [top, ...Array(Math.max(0, h - 2)).fill(mid), bot].join('\n');
 }
 
+function defaultShopFrameRaster(cols = SHOP_FRAME_DEFAULT_COLS, rows = SHOP_FRAME_DEFAULT_ROWS) {
+  const raster = assets.components?.frames?.shopRaster;
+  if (
+    raster
+    && raster.trim()
+    && cols === SHOP_FRAME_DEFAULT_COLS
+    && rows === SHOP_FRAME_DEFAULT_ROWS
+  ) {
+    return raster.replace(/\r/g, '');
+  }
+  return drawFrame(assets.components.frames.shop, cols, rows);
+}
+
+function isGeneratedShopFrameRaster(raster, cols, rows) {
+  const clean = String(raster || '').replace(/\r/g, '');
+  return clean === drawFrame(ASSET_PACK.components.frames.shop, cols, rows)
+    || clean === drawFrame({ tl: '+', tr: '+', bl: '+', br: '+', h: '-', v: '|', fill: ' ' }, cols, rows);
+}
+
 function applyAssetPatch(patch, options = {}) {
   assets = deepMergeAsset(cloneAsset(assets), patch);
   if (options.persist) writeStoredAssetPatch(assets);
@@ -694,12 +774,45 @@ function syncAssetConsumers() {
 window.StoneSkipAssets = {
   get: () => cloneAsset(assets),
   defaults: () => cloneAsset(ASSET_PACK),
+  defaultShopFrameRaster: () => defaultShopFrameRaster(),
   apply: applyAssetPatch,
   save: patch => patch ? applyAssetPatch(patch, { persist: true }) : writeStoredAssetPatch(assets),
   reset: resetAssets,
   renderAll: syncAssetConsumers,
 };
 window.StoneSkipDefaultAssets = () => cloneAsset(ASSET_PACK);
+
+function assetEditorBridgePayload(id = null) {
+  return {
+    type: 'stone-skip-assets-response',
+    id,
+    assets: cloneAsset(assets),
+    defaults: cloneAsset(ASSET_PACK),
+    defaultShopFrameRaster: defaultShopFrameRaster(),
+  };
+}
+
+function postAssetEditorPayload(id = null) {
+  if (window.parent === window) return;
+  window.parent.postMessage(assetEditorBridgePayload(id), '*');
+}
+
+if (new URLSearchParams(location.search).has('asset-editor')) {
+  window.addEventListener('message', event => {
+    const message = event.data;
+    if (!message || message.type !== 'stone-skip-assets-request') return;
+    if (message.action === 'save' && message.patch) {
+      applyAssetPatch(message.patch, { persist: true });
+    } else if (message.action === 'reset') {
+      resetAssets();
+    } else if (message.action === 'apply' && message.patch) {
+      applyAssetPatch(message.patch);
+    }
+    event.source?.postMessage(assetEditorBridgePayload(message.id), '*');
+  });
+  postAssetEditorPayload();
+  window.addEventListener('load', () => postAssetEditorPayload());
+}
 
 // Theme: real palette switch, not visual inversion.
 const THEME_KEY = 'stone-skipping-game-theme';
@@ -1480,9 +1593,9 @@ function renderShopFrame() {
   const rect = $shopPanel.getBoundingClientRect();
   const cw = CW || 8.4;
   const ch = CH || 16.52;
-  const cols = Math.max(24, Math.floor(rect.width / cw));
-  const rows = Math.max(8, Math.floor(rect.height / ch));
-  $shopFrame.textContent = drawFrame(assets.components.frames.shop, cols, rows);
+  const cols = rect.width > 0 ? Math.max(24, Math.floor(rect.width / cw)) : SHOP_FRAME_DEFAULT_COLS;
+  const rows = rect.height > 0 ? Math.max(8, Math.floor(rect.height / ch)) : SHOP_FRAME_DEFAULT_ROWS;
+  $shopFrame.textContent = defaultShopFrameRaster(cols, rows);
 }
 
 function updateShop() {
