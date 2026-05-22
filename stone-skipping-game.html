@@ -19,18 +19,20 @@
   --fish:#6688aa;
   --stone:#d4c9a8;
   --hint:#333;
-  --score:#2e2e2e;
+  --points:#777;
+  --score:var(--points);
   --challenge:#333;
   --challenge-current:#4a4a4a;
   --challenge-label:#2a2a2a;
-  --challenge-target:#d8d8d8;
+  --challenge-target:#f2f2f2;
   --challenge-hit:#4cd97a;
   --toggle-bg:#080808;
   --toggle-border:#252525;
-  --toggle-text:#777;
+  --toggle-text:#f2f2f2;
   --shop-strong:#f2f2f2;
   --shop-muted:#f2f2f2;
   --shop-line:#d8d8d8;
+  --shop-frame:#777;
   --splash-bg:#000;
   --splash-stage:#aaa;
   --splash-ring:#666;
@@ -39,27 +41,29 @@
   --shop-art-rows:14;
 }
 body[data-theme="day"] {
-  --bg:#e6e6e6;
-  --waves:#4f5652;
+  --bg:#e8e8e8;
+  --waves:#555;
   --win:#16783d;
   --band:#ff0000;
-  --fish:#385e70;
+  --fish:#666;
   --stone:#343434;
   --hint:#a2a2a2;
-  --score:#8c8c8c;
+  --points:#777;
+  --score:var(--points);
   --challenge:#8d8d8d;
   --challenge-current:#626262;
-  --challenge-label:#b0b0b0;
-  --challenge-target:#171717;
+  --challenge-label:#777;
+  --challenge-target:#111;
   --challenge-hit:#1d7d44;
   --toggle-bg:#ffffff;
   --toggle-border:#c8c8c8;
-  --toggle-text:#444;
+  --toggle-text:#111;
   --shop-strong:#111;
   --shop-muted:#111;
   --shop-line:#111;
-  --splash-bg:#e6e6e6;
-  --splash-stage:#555d59;
+  --shop-frame:#777;
+  --splash-bg:#e8e8e8;
+  --splash-stage:#555;
   --splash-ring:#747474;
   --splash-title:#151515;
   --splash-prompt:#9f9f9f;
@@ -111,6 +115,10 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 .ch-label   { color:var(--challenge-label); }
 .ch-target  { color:var(--challenge-target); font-size:17px; }
 .ch-hit     { color:var(--challenge-hit); font-size:17px; }
+.ch-board   { display:inline-flex; gap:12px; align-items:flex-start; vertical-align:top; }
+.ch-card    { display:inline-flex; flex-direction:column; align-items:center; color:var(--challenge-target); font-size:15px; line-height:1.05; }
+.ch-reward  { color:var(--points); font-size:11px; margin-top:2px; }
+.ch-card.hit, .ch-card.hit .ch-reward { color:var(--challenge-hit); }
 #theme-toggle {
   position:fixed; top:8px; left:12px; z-index:90;
 }
@@ -120,6 +128,15 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   line-height:1; cursor:pointer; padding:0;
 }
 .ascii-btn:hover { color:var(--shop-strong) }
+body[data-theme="day"] .ascii-btn {
+  font-weight:500;
+  text-shadow:.35px 0 currentColor;
+}
+body[data-theme="day"] #waves,
+body[data-theme="day"] #win-ring {
+  font-weight:500;
+  text-shadow:.35px 0 currentColor;
+}
 #shop-button {
   position:fixed; top:11px; right:14px; z-index:95;
 }
@@ -142,7 +159,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 }
 #shop-frame {
   position:absolute; inset:0; z-index:0;
-  color:var(--shop-line);
+  color:var(--shop-frame);
   font-family:'Courier New',Courier,monospace;
   font-size:14px; font-weight:500; line-height:1.18;
   white-space:pre; pointer-events:none;
@@ -1110,18 +1127,22 @@ const $shopNext   = document.getElementById('shop-next');
 const $shopClose  = document.getElementById('shop-close');
 
 function updateChallenge() {
-  if (!target) return;
+  if (!challengeTargets.length) return;
+  const board = challengeTargets.map((item, index) => {
+    const hit = challengeHit && challengeHit.index === index ? ' hit' : '';
+    return `<span class="ch-card${hit}">[ ${item.value} ]<span class="ch-reward">+${item.reward}</span></span>`;
+  }).join('');
   if (challengeWon && (stone.state === 'sinking' || stone.state === 'dead')) {
-    $challenge.innerHTML = `<span class="ch-hit">${assets.glyphs.icons.win}</span> <span class="ch-hit">${target}</span>`;
+    $challenge.innerHTML =
+      `<span class="ch-hit">${assets.glyphs.icons.win}</span> <span class="ch-board">${board}</span>`;
     return;
   }
   const cur = (stone.state === 'flying' && stone.skipN > 0) ? stone.skipN : null;
   if (cur !== null) {
     $challenge.innerHTML =
-      `<span class="ch-current">${cur}</span><span class="ch-sep">/</span><span class="ch-target">${target}</span>`;
+      `<span class="ch-current">${cur}</span><span class="ch-sep">/</span><span class="ch-board">${board}</span>`;
   } else {
-    $challenge.innerHTML =
-      `<span class="ch-label">hit </span><span class="ch-target">${target}</span>`;
+    $challenge.innerHTML = `<span class="ch-board">${board}</span>`;
   }
 }
 
@@ -1268,18 +1289,61 @@ function computeAchievable() {
 }
 let ACHIEVABLE = computeAchievable();
 
-let target      = 0;
+const CHALLENGE_TIERS = [
+  { key: 'small', min: 6,  max: 15, reward: 1 },
+  { key: 'mid',   min: 16, max: 34, reward: 2 },
+  { key: 'high',  min: 35, max: 55, reward: 3 },
+];
+
+let challengeTargets = [];
+let challengeHit = null;
 let challengeWon = false;
 let totalWins   = 0;
 let shopIndex   = 0;
 const shopPurchased = Array(SHOP_STONES.length).fill(false);
 
-function pickTarget() {
-  const pool = [...ACHIEVABLE];
-  let t;
-  do { t = pool[Math.random() * pool.length | 0]; } while (pool.length > 1 && t === target);
-  target = t;
+function randomTargetForTier(tier, previous) {
+  const min = tier.min;
+  const max = tier.max;
+  let value;
+  do {
+    value = min + (Math.random() * (max - min + 1) | 0);
+  } while (max > min && value === previous);
+  return value;
+}
+
+function pickTarget(index = null) {
+  if (index === null || challengeTargets.length !== CHALLENGE_TIERS.length) {
+    challengeTargets = CHALLENGE_TIERS.map(tier => ({
+      ...tier,
+      value: randomTargetForTier(tier),
+    }));
+  } else {
+    const tier = CHALLENGE_TIERS[index];
+    const previous = challengeTargets[index]?.value;
+    challengeTargets[index] = {
+      ...tier,
+      value: randomTargetForTier(tier, previous),
+    };
+  }
+  challengeHit = null;
   challengeWon = false;
+}
+
+function findChallengeTarget(skipN) {
+  return challengeTargets
+    .map((target, index) => ({ target, index }))
+    .filter(item => item.target.value === skipN)
+    .sort((a, b) => b.target.reward - a.target.reward)[0] || null;
+}
+
+function awardChallenge(match, drop) {
+  challengeHit = { ...match.target, index: match.index };
+  challengeWon = true;
+  totalWins += match.target.reward;
+  winDrop = drop;
+  playWin();
+  updateScore();
 }
 
 let bestSkips = 0;
@@ -1454,15 +1518,16 @@ function updateStone(dt) {
       const ndx = cos * stone.vx - sin * stone.vy;
       const ndy = sin * stone.vx + cos * stone.vy;
 
-      // ±1 forgiveness — target+1: would bounce once more then immediately sink
-      if (!challengeWon && stone.skipN === target && spdNext < MIN_SPD) {
+      // One-skip forgiveness: a near miss can still land on one visible target.
+      const currentMatch = findChallengeTarget(stone.skipN);
+
+      if (!challengeWon && currentMatch && spdNext < MIN_SPD) {
         stone.vx = stone.vy = 0;
         stone.state = 'sinking';
         const sinkDrop = new Drop(stone.x, stone.y, t, 0.9, DECAY_D * 0.65, stone.splashR * 1.2);
         drops.push(sinkDrop);
         playSink();
-        challengeWon = true; totalWins++; winDrop = sinkDrop; playWin();
-        updateScore();
+        awardChallenge(currentMatch, sinkDrop);
       } else {
         stone.vx = (ndx / spd) * spdNext;
         stone.vy = (ndy / spd) * spdNext;
@@ -1475,8 +1540,9 @@ function updateStone(dt) {
         if (stone.skipN > bestSkips) bestSkips = stone.skipN;
         updateScore();
 
-        if (!challengeWon && spdNext < MIN_SPD && stone.skipN === target - 1) {
-          // target-1 extension: boost for exactly one more skip
+        const nextMatch = findChallengeTarget(stone.skipN + 1);
+        if (!challengeWon && spdNext < MIN_SPD && nextMatch) {
+          // One-skip forgiveness: if a target is next, give exactly one more skip.
           const boost = (MIN_SPD * 0.98 / effVxDamp) / spdNext;
           stone.vx *= boost; stone.vy *= boost;
           stone.skipTimer = Math.max(0.07, 0.007 * MIN_SPD * 0.98 / effVxDamp);
@@ -1486,8 +1552,9 @@ function updateStone(dt) {
           const sinkDrop = new Drop(stone.x, stone.y, t, 0.9, DECAY_D * 0.65, stone.splashR * 1.2);
           drops.push(sinkDrop);
           playSink();
-          if (stone.skipN === target && !challengeWon) {
-            challengeWon = true; totalWins++; winDrop = sinkDrop; playWin();
+          const landedMatch = findChallengeTarget(stone.skipN);
+          if (landedMatch && !challengeWon) {
+            awardChallenge(landedMatch, sinkDrop);
           }
         }
       }
@@ -1505,7 +1572,7 @@ function updateStone(dt) {
     stone.deadT += dt;
     const respawnDelay = challengeWon ? 2.2 : 1.5;
     if (stone.deadT > respawnDelay) {
-      if (challengeWon) pickTarget();
+      if (challengeWon && challengeHit) pickTarget(challengeHit.index);
       spawnStone();
       $hint.style.opacity = '1';
       updateScore();
