@@ -236,6 +236,45 @@ body[data-theme="day"] #win-ring {
 #shop-status { display:none }
 
 /* ── Splash overlay ─────────────────────────────────────────────────── */
+@media (orientation: portrait) and (max-width: 720px) {
+  #score {
+    top:34px;
+    right:14px;
+  }
+  #challenge {
+    top:32px;
+    left:50%;
+    max-width:calc(100vw - 32px);
+  }
+  .ch-board { gap:8px; }
+  .ch-card { font-size:14px; }
+  .ch-reward { font-size:10px; }
+  #hint { bottom:calc(14px + env(safe-area-inset-bottom, 0px)); }
+  #shop-panel {
+    width:min(94vw, 430px);
+    height:min(86svh, 660px);
+    min-height:0;
+  }
+  #shop-panel > div {
+    padding:48px 34px 60px;
+  }
+  .shop-center {
+    width:38ch;
+    row-gap:30px;
+  }
+  #shop-art {
+    width:100%;
+    font-size:13px;
+  }
+  .shop-copy {
+    width:38ch;
+  }
+  .shop-arrow {
+    top:calc((100% - 60px - 48px) / 2 + 48px);
+    font-size:24px;
+  }
+}
+
 #splash {
   position:fixed; inset:0; z-index:200; background:var(--splash-bg);
   display:flex; flex-direction:column;
@@ -755,6 +794,73 @@ function defaultShopFrameRaster(cols = SHOP_FRAME_DEFAULT_COLS, rows = SHOP_FRAM
   return drawFrame(assets.components.frames.shop, cols, rows);
 }
 
+function fitRasterToSize(raster, targetCols, targetRows) {
+  const srcLines = String(raster || '').replace(/\r/g, '').split('\n');
+  const srcH = Math.max(1, srcLines.length);
+  const srcW = Math.max(1, ...srcLines.map(line => line.length));
+  const cols = Math.max(2, targetCols | 0);
+  const rows = Math.max(2, targetRows | 0);
+  const source = srcLines.map(line => line.padEnd(srcW, ' '));
+  return Array.from({ length: rows }, (_, y) => {
+    const sy = rows <= 1 ? 0 : Math.round(y * (srcH - 1) / (rows - 1));
+    let row = '';
+    for (let x = 0; x < cols; x++) {
+      const sx = cols <= 1 ? 0 : Math.round(x * (srcW - 1) / (cols - 1));
+      row += source[sy]?.[sx] || ' ';
+    }
+    return row;
+  }).join('\n');
+}
+
+function fitRasterLine(line, targetCols) {
+  const source = String(line || '').trim();
+  const cols = Math.max(2, targetCols | 0);
+  if (!source.trim()) return ' '.repeat(cols);
+  const margin = cols > 42 ? 3 : 1;
+  const inner = Math.max(2, cols - margin * 2);
+  const fitted = Array.from({ length: inner }, (_, x) => {
+    const sx = inner <= 1 ? 0 : Math.round(x * (source.length - 1) / (inner - 1));
+    return source[sx] || ' ';
+  }).join('');
+  return `${' '.repeat(margin)}${fitted}${' '.repeat(margin)}`.slice(0, cols).padEnd(cols, ' ');
+}
+
+function placeText(row, text, x) {
+  for (let i = 0; i < text.length; i++) {
+    const nx = x + i;
+    if (nx >= 0 && nx < row.length && text[i] !== ' ') row[nx] = text[i];
+  }
+}
+
+function portraitShopFrameRaster(raster, targetCols, targetRows) {
+  const lines = String(raster || '').replace(/\r/g, '').split('\n');
+  const cols = Math.max(28, targetCols | 0);
+  const rows = Math.max(20, targetRows | 0);
+  const frame = assets.components.frames.shop;
+  const out = Array.from({ length: rows }, () => Array(cols).fill(' '));
+
+  for (let y = 1; y < rows - 1; y++) {
+    out[y][0] = frame.v;
+    out[y][cols - 1] = frame.v;
+  }
+
+  const topRows = [lines[0], lines[1]].filter(Boolean).map(line => fitRasterLine(line, cols));
+  const bottomSource = [lines[30], lines[31], lines[32]].filter(Boolean);
+  const bottomRows = bottomSource.map(line => fitRasterLine(line, cols));
+
+  topRows.forEach((line, y) => placeText(out[y], line, 0));
+  bottomRows.forEach((line, i) => placeText(out[rows - bottomRows.length + i], line, 0));
+
+  const upperFishY = Math.min(rows - 8, Math.max(5, Math.round(rows * 0.22)));
+  const lowerFishY = Math.min(rows - 7, Math.max(upperFishY + 8, Math.round(rows * 0.72)));
+  placeText(out[upperFishY], '><>', 6);
+  placeText(out[upperFishY], '<><', cols - 9);
+  placeText(out[lowerFishY], '><>', 6);
+  placeText(out[lowerFishY], '<><', cols - 9);
+
+  return out.map(row => row.join('')).join('\n');
+}
+
 function isGeneratedShopFrameRaster(raster, cols, rows) {
   const clean = String(raster || '').replace(/\r/g, '');
   return clean === drawFrame(ASSET_PACK.components.frames.shop, cols, rows)
@@ -1099,10 +1205,10 @@ const FISH_SHOAL_SIZE     = 5;
 const FISH_SHOAL_COOLDOWN = 20;
 const FISH_MAX            = 5;
 const FISH_SPEED       = 18;
-const FISH_FLEE_SPEED  = 40;
+const FISH_FLEE_SPEED  = 52;
 
 // ── layout ────────────────────────────────────────────────────────────
-let CW, CH, COLS, ROWS, WATER_Y, blankRow;
+let CW, CH, COLS, ROWS, WATER_Y, blankRow, ORIENTATION;
 
 const $waves     = document.getElementById('waves');
 const $winRing   = document.getElementById('win-ring');
@@ -1146,7 +1252,16 @@ function updateChallenge() {
   }
 }
 
+function viewportSize() {
+  const vv = window.visualViewport;
+  return {
+    width: Math.floor(vv?.width || window.innerWidth),
+    height: Math.floor(vv?.height || window.innerHeight),
+  };
+}
+
 function initLayout() {
+  const vp = viewportSize();
   const p = document.createElement('span');
   p.style.cssText = "position:fixed;visibility:hidden;font-family:'Courier New',monospace;font-size:14px;white-space:pre";
   p.textContent = 'M'.repeat(200);
@@ -1154,8 +1269,10 @@ function initLayout() {
   CW = p.getBoundingClientRect().width / 200;
   document.body.removeChild(p);
   CH      = 14 * 1.18;
-  COLS    = Math.floor(window.innerWidth  / CW);
-  ROWS    = Math.floor(window.innerHeight / CH);
+  COLS    = Math.floor(vp.width  / CW);
+  ROWS    = Math.floor(vp.height / CH);
+  ORIENTATION = vp.height > vp.width ? 'portrait' : 'landscape';
+  document.body.dataset.orientation = ORIENTATION;
   WATER_Y = Math.floor(ROWS * 0.6);
   blankRow = ' '.repeat(COLS);
 }
@@ -1164,7 +1281,7 @@ function initLayout() {
 class Drop {
   constructor(x, y, born, str = 1, decayD = DECAY_D, splashR = 0.42) {
     this.x = x; this.y = y; this.born = born;
-    this.life = 4.5 + Math.random() * 1.5;
+    this.life = 3.9 + Math.random() * 1.1;
     this.str    = str;
     this.decayD = decayD;
     this.splashR = splashR;
@@ -1176,6 +1293,32 @@ let winDrop = null;
 
 // ── Fish ──────────────────────────────────────────────────────────────
 function genShoalPaths() {
+  if (ORIENTATION === 'portrait') {
+    const xLo = Math.max(2, Math.floor(COLS * 0.10));
+    const xHi = Math.min(COLS - 2, Math.floor(COLS * 0.90));
+    const span = xHi - xLo;
+    const cx0 = (xLo + xHi) / 2;
+    const arc = span * 0.16;
+    const spread = span * 0.34;
+    const cl = x => Math.max(xLo + 1, Math.min(xHi - 1, x));
+    const xj = () => (Math.random() - 0.5) * span * 0.05;
+    const yj = () => (Math.random() - 0.5) * ROWS * 0.05;
+    return Array.from({ length: 5 }, (_, i) => {
+      const laneT = (i / 4) - 0.5;
+      const cx = cx0 + laneT * spread;
+      return [
+        { x: cl(cx             + xj()), y: -5 },
+        { x: cl(cx - arc * 0.5 + xj()), y: ROWS * 0.18 + yj() },
+        { x: cl(cx - arc       + xj()), y: ROWS * 0.34 + yj() },
+        { x: cl(cx - arc * 0.7 + xj()), y: ROWS * 0.48 + yj() },
+        { x: cl(cx             + xj()), y: ROWS * 0.60 + yj() },
+        { x: cl(cx + arc * 0.7 + xj()), y: ROWS * 0.72 + yj() },
+        { x: cl(cx + arc       + xj()), y: ROWS * 0.84 + yj() },
+        { x: cl(cx + arc * 0.5 + xj()), y: ROWS * 0.95 + yj() },
+        { x: cl(cx             + xj()), y: ROWS + 8 },
+      ];
+    });
+  }
   const yLo  = Math.max(2, Math.floor(ROWS * 0.10));
   const yHi  = Math.min(ROWS - 2, Math.floor(ROWS * 0.85));
   const span = yHi - yLo;
@@ -1204,12 +1347,12 @@ function genShoalPaths() {
 
 class Fish {
   constructor(path) {
-    this.x     = COLS + 4 + Math.random() * 10;
-    this.y     = path[0].y + (Math.random() - 0.5) * 6;
+    this.x     = path[0].x + (Math.random() - 0.5) * 2;
+    this.y     = path[0].y + (Math.random() - 0.5) * 2;
     this.wps   = path;
-    this.wpIdx = 0;
+    this.wpIdx = 1;
     this.sz    = 0.40 + Math.random() * 0.85;
-    this.angle = Math.PI;
+    this.angle = Math.atan2((path[1]?.y ?? path[0].y) - this.y, (path[1]?.x ?? path[0].x) - this.x);
     this.speed = FISH_SPEED * 0.8 * (0.8 + Math.random() * 0.4);
     this.animPhase = Math.random() * Math.PI * 2;
     this.animFreq  = 6 + Math.random() * 4;
@@ -1341,6 +1484,7 @@ function awardChallenge(match, drop) {
   challengeHit = { ...match.target, index: match.index };
   challengeWon = true;
   totalWins += match.target.reward;
+  drop.isWin = true;
   winDrop = drop;
   playWin();
   updateScore();
@@ -1359,8 +1503,9 @@ const stone = {
 };
 
 function spawnStone() {
-  stone.spawnX = Math.round(COLS * 0.08);
-  stone.spawnY = Math.round(ROWS * 0.50);
+  const portrait = ORIENTATION === 'portrait';
+  stone.spawnX = Math.round(COLS * (portrait ? 0.50 : 0.08));
+  stone.spawnY = Math.round(ROWS * (portrait ? 0.72 : 0.50));
   stone.x = stone.spawnX; stone.y = stone.spawnY;
   const type = STONE_TYPES[Math.random() * STONE_TYPES.length | 0];
   stone.char         = type.char;
@@ -1570,7 +1715,7 @@ function updateStone(dt) {
   }
   else if (stone.state === 'dead') {
     stone.deadT += dt;
-    const respawnDelay = challengeWon ? 2.2 : 1.5;
+    const respawnDelay = challengeWon ? 1.25 : 0.75;
     if (stone.deadT > respawnDelay) {
       if (challengeWon && challengeHit) pickTarget(challengeHit.index);
       spawnStone();
@@ -1613,7 +1758,8 @@ function formatShopArt(art) {
   });
   if (!Number.isFinite(inkLeft)) return '';
 
-  const targetW = Math.max(44, rawWidth + 2);
+  const baseWidth = ORIENTATION === 'portrait' ? 38 : 44;
+  const targetW = Math.max(baseWidth, rawWidth + 2);
   const targetH = Math.max(14, trimmed.length);
   const inkCenter = (inkLeft + inkRight + 1) / 2;
   const inkMiddle = (inkTop + inkBottom + 1) / 2;
@@ -1639,7 +1785,8 @@ function formatShopArt(art) {
 function renderShopFrame() {
   if (!$shopFrame || !$shopPanel) return;
   const raster = assets.components.frames.shopRaster;
-  if (raster && raster.trim()) {
+  const useFixedRaster = ORIENTATION !== 'portrait' && raster && raster.trim();
+  if (useFixedRaster) {
     const clean = raster.replace(/\r/g, '');
     const lines = clean.split('\n');
     const cols = Math.max(24, ...lines.map(line => line.length));
@@ -1662,7 +1809,9 @@ function renderShopFrame() {
   const ch = CH || 16.52;
   const cols = rect.width > 0 ? Math.max(24, Math.floor(rect.width / cw)) : SHOP_FRAME_DEFAULT_COLS;
   const rows = rect.height > 0 ? Math.max(8, Math.floor(rect.height / ch)) : SHOP_FRAME_DEFAULT_ROWS;
-  $shopFrame.textContent = defaultShopFrameRaster(cols, rows);
+  $shopFrame.textContent = raster && raster.trim()
+    ? portraitShopFrameRaster(raster, cols, rows)
+    : defaultShopFrameRaster(cols, rows);
 }
 
 function updateShop() {
@@ -1769,21 +1918,33 @@ function renderLayer(el, dropList, crestT = CREST_T) {
   for (let y = 0; y < ROWS; y++) {
     let row = '';
     for (let x = 0; x < COLS; x++) {
-      let bW = 0, bDx = 0, bDy = 0;
+      let bW = 0, bDx = 0, bDy = 0, bAge = 0, bLife = 1;
       for (const d of dropList) {
         const c = waveComp(d, x, y, t);
         if (!c || c.sv <= crestT) continue;
         const w = c.sv * c.ev;
-        if (w > bW) { bW = w; bDx = c.dx; bDy = c.dy; }
+        if (w > bW) {
+          bW = w; bDx = c.dx; bDy = c.dy;
+          bAge = Math.max(0, t - d.born);
+          bLife = d.life || 1;
+        }
       }
       // Spatial noise — breaks up perfect-circle uniformity
       if (bW > 0) bW *= 0.80 + (((x * 127 + y * 311) ^ (x * 53 + y * 19)) & 0xFF) / 255.0 * 0.40;
+      const fadeAge = Math.max(0, Math.min(1, bAge / bLife));
+      const ageEnvelope = fadeAge < 0.62 ? 1 : Math.max(0, (1 - fadeAge) / 0.38) ** 2.2;
+      bW *= ageEnvelope;
       if (bW >= FADE_LOW) {
-        row += ringChar(bDx, bDy, bW, x, y);
+        const tailFade = Math.max(0, (1 - fadeAge) / 0.34);
+        const keep = fadeAge < 0.72
+          ? Math.max(0.05, 1 - fadeAge ** 1.35)
+          : 0.01 + 0.08 * tailFade * tailFade;
+        const h = ((x * 374761393 + y * 668265263) & 0x7FFFFFFF) % 1000;
+        row += h < keep * 1000 ? ringChar(bDx, bDy, bW, x, y) : ' ';
       } else if (bW >= FADE_ZERO) {
         const p = ((bW - FADE_ZERO) / (FADE_LOW - FADE_ZERO)) ** 3;
         const h = ((x * 374761393 + y * 668265263) & 0x7FFFFFFF) % 1000;
-        row += h < p * 1000 ? '˙' : ' ';
+        row += h < p * Math.max(0.04, ageEnvelope) * 1000 ? '˙' : ' ';
       } else {
         let ch = ' ';
         for (const d of dropList) {
@@ -1808,15 +1969,13 @@ function renderLayer(el, dropList, crestT = CREST_T) {
 function renderWaves() {
   // More drops → raise crest threshold → thinner rings, less fill overlap
   const dynCrestT = Math.min(0.93, CREST_T + drops.length * 0.008);
-  renderLayer($waves, drops.filter(d => d !== winDrop), dynCrestT);
+  renderLayer($waves, drops.filter(d => !d.isWin), dynCrestT);
 }
 
 function renderWinRing() {
-  if (winDrop && t - winDrop.born < winDrop.life) {
-    renderLayer($winRing, [winDrop]);
-  } else if (!winDrop) {
-    $winRing.textContent = '';
-  }
+  const winDrops = drops.filter(d => d.isWin);
+  if (winDrops.length) renderLayer($winRing, winDrops);
+  else $winRing.textContent = '';
 }
 
 // ── Render stone (bright white span) ─────────────────────────────────
@@ -1895,14 +2054,17 @@ function updateFish(dt) {
     shoalCooldown  = 0;
     fish.forEach(f => {
       f.state = 'fleeing';
-      if (f.wpIdx < f.wps.length / 2) {
-        // Before halfway — reverse back along entered path toward exit right
+      {
+        // Panic turn: reverse along the path already entered, then leave through the entry side.
         const back = f.wps.slice(0, Math.max(1, f.wpIdx)).reverse();
-        back.push({ x: COLS + 10, y: back.length > 0 ? back[back.length - 1].y : f.y });
-        f.wps  = back;
-        f.wpIdx = 0;
+        const entry = back[back.length - 1] || f.wps[0] || { x: f.x, y: f.y };
+        const exit = ORIENTATION === 'portrait'
+          ? { x: entry.x, y: -8 }
+          : { x: COLS + 10, y: entry.y };
+        f.wps = [{ x: f.x, y: f.y }, ...back, exit];
+        f.wpIdx = 1;
+        f.angularVel = 0;
       }
-      // else: past halfway — keep remaining waypoints, continue toward exit
     });
     fishBubbles = [];
   }
@@ -1934,7 +2096,7 @@ function updateFish(dt) {
     let dta = f.angle - f.tailAngle;
     while (dta >  Math.PI) dta -= 2*Math.PI;
     while (dta < -Math.PI) dta += 2*Math.PI;
-    f.tailAngle += dta * Math.min(1, 1.2 * dt);
+    f.tailAngle += dta * Math.min(1, 2.4 * dt);
 
     if (f.state === 'fleeing') {
       const wp = f.wps[f.wpIdx];
@@ -1943,8 +2105,8 @@ function updateFish(dt) {
         let da = Math.atan2(dy, dx) - f.angle;
         while (da >  Math.PI) da -= 2 * Math.PI;
         while (da < -Math.PI) da += 2 * Math.PI;
-        f.angle += Math.sign(da) * Math.min(Math.abs(da), 4.0 * dt);
-        if (Math.sqrt(dx*dx + dy*dy) < 12) {
+        f.angle += Math.sign(da) * Math.min(Math.abs(da), 10.0 * dt);
+        if (Math.sqrt(dx*dx + dy*dy) < 7) {
           f.wpIdx++;
           if (f.wpIdx >= f.wps.length) f.state = 'done';
         }
@@ -1973,8 +2135,8 @@ function updateFish(dt) {
         let da = Math.atan2(dy, dx) - f.angle;
         while (da >  Math.PI) da -= 2 * Math.PI;
         while (da < -Math.PI) da += 2 * Math.PI;
-        const MAX_OMEGA = 0.9, ACCEL = 5.0;
-        const wantOmega = Math.max(-MAX_OMEGA, Math.min(MAX_OMEGA, da * 3));
+        const MAX_OMEGA = 2.4, ACCEL = 10.0;
+        const wantOmega = Math.max(-MAX_OMEGA, Math.min(MAX_OMEGA, da * 4.5));
         f.angularVel += (wantOmega - f.angularVel) * Math.min(1, ACCEL * dt);
         f.angle += f.angularVel * dt;
         if (Math.sqrt(dx*dx + dy*dy) < 10) {
@@ -2145,7 +2307,35 @@ spawnStone();
 updateScore();
 updateChallenge();
 if (new URLSearchParams(location.search).has('shop')) requestAnimationFrame(openShop);
-window.addEventListener('resize', () => { initLayout(); renderShopFrame(); spawnStone(); drops = []; fish = []; fishBubbles = []; fishBuf = null; calmTimer = 0; updateChallenge(); });
+let relayoutTimer = null;
+let lastLayoutKey = `${COLS}x${ROWS}:${ORIENTATION}`;
+function relayoutGame() {
+  initLayout();
+  const layoutKey = `${COLS}x${ROWS}:${ORIENTATION}`;
+  if (layoutKey === lastLayoutKey) {
+    renderShopFrame();
+    updateChallenge();
+    return;
+  }
+  lastLayoutKey = layoutKey;
+  renderShopFrame();
+  spawnStone();
+  drops = [];
+  fish = [];
+  fishBubbles = [];
+  fishBuf = null;
+  calmTimer = 0;
+  shoalPaths = null;
+  shoalFishCount = 0;
+  updateChallenge();
+}
+function scheduleRelayout() {
+  clearTimeout(relayoutTimer);
+  relayoutTimer = setTimeout(relayoutGame, 120);
+}
+window.addEventListener('resize', scheduleRelayout);
+window.addEventListener('orientationchange', scheduleRelayout);
+window.visualViewport?.addEventListener('resize', scheduleRelayout);
 function startGame() { requestAnimationFrame(frame); }
 
 // ── Splash ────────────────────────────────────────────────────────────
