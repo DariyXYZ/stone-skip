@@ -93,24 +93,34 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   0%   { opacity:1; transform:translateY(0) }
   100% { opacity:0; transform:translateY(-22px) }
 }
-@property --art-green {
+@property --art-gf {
+  syntax: '<percentage>';
+  initial-value: 0%;
+  inherits: false;
+}
+@property --art-gb {
   syntax: '<percentage>';
   initial-value: 0%;
   inherits: false;
 }
 #shop-art.shop-art-flash {
-  --art-green: 0%;
-  background: linear-gradient(to top, var(--win) var(--art-green), var(--shop-strong) var(--art-green));
+  --art-gf: 0%; --art-gb: 0%;
+  background: linear-gradient(to top,
+    var(--shop-strong) var(--art-gb),
+    var(--win)         var(--art-gb),
+    var(--win)         var(--art-gf),
+    var(--shop-strong) var(--art-gf)
+  );
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   text-shadow: none;
-  animation: art-green-sweep 0.52s ease-out both;
+  animation: art-green-sweep 0.56s ease-in-out both;
 }
 @keyframes art-green-sweep {
-  0%   { --art-green: 0%   }
-  42%  { --art-green: 110% }
-  100% { --art-green: 0%   }
+  0%   { --art-gf: 0%;   --art-gb: 0%   }
+  44%  { --art-gf: 112%; --art-gb: 0%   }
+  100% { --art-gf: 112%; --art-gb: 112% }
 }
 .purchase-spark {
   position:fixed;
@@ -1916,24 +1926,28 @@ function spawnPurchaseEffect() {
     $shopArt.classList.remove('shop-art-flash');
   }, { once: true });
 
-  // ASCII sparks: start at bottom of art, fly straight upward
+  // Sparks spawn progressively at the rising green front
   const sparkChars = ['\xB7', '˙', '.', '\xB7', '+', '˙', '\xB7', '.', '*', '\xB7', '˙', '.'];
-  for (let i = 0; i < 14; i++) {
-    const sp = document.createElement('span');
-    sp.className = 'purchase-spark';
-    sp.textContent = sparkChars[i % sparkChars.length];
-    const startX = rect.left + rect.width  * (0.15 + Math.random() * 0.7);
-    const startY = rect.top  + rect.height * (0.65 + Math.random() * 0.3);
-    const tx     = ((Math.random() - 0.5) * 36).toFixed(1);
-    const ty     = (-(28 + Math.random() * 62)).toFixed(1);
-    const dur    = (0.32 + Math.random() * 0.36).toFixed(2);
-    sp.style.left = startX + 'px';
-    sp.style.top  = startY + 'px';
-    sp.style.setProperty('--tx', tx + 'px');
-    sp.style.setProperty('--ty', ty + 'px');
-    sp.style.setProperty('--dur', dur + 's');
-    document.body.appendChild(sp);
-    sp.addEventListener('animationend', () => sp.remove());
+  const FRONT_DUR = 0.56 * 0.44 * 1000; // ms for front to reach top
+  const COUNT = 12;
+  for (let i = 0; i < COUNT; i++) {
+    const progress = i / (COUNT - 1);
+    setTimeout(() => {
+      const sp = document.createElement('span');
+      sp.className = 'purchase-spark';
+      sp.textContent = sparkChars[i % sparkChars.length];
+      const frontY = rect.bottom - progress * rect.height;
+      const tx  = ((Math.random() - 0.5) * 32).toFixed(1);
+      const ty  = (-(14 + Math.random() * 44)).toFixed(1);
+      const dur = (0.24 + Math.random() * 0.28).toFixed(2);
+      sp.style.left = (rect.left + rect.width * (0.15 + Math.random() * 0.7)) + 'px';
+      sp.style.top  = (frontY + (Math.random() - 0.5) * rect.height * 0.08) + 'px';
+      sp.style.setProperty('--tx', tx + 'px');
+      sp.style.setProperty('--ty', ty + 'px');
+      sp.style.setProperty('--dur', dur + 's');
+      document.body.appendChild(sp);
+      sp.addEventListener('animationend', () => sp.remove());
+    }, progress * FRONT_DUR);
   }
 }
 
