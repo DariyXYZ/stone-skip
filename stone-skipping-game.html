@@ -93,6 +93,27 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   0%   { opacity:1; transform:translateY(0) }
   100% { opacity:0; transform:translateY(-22px) }
 }
+.purchase-flash {
+  position:fixed; white-space:pre;
+  font-family:'Courier New',monospace; font-weight:500;
+  color:var(--win); pointer-events:none; z-index:210;
+  animation:purchase-sweep 0.48s ease-out both;
+}
+.purchase-spark {
+  position:fixed;
+  font-family:'Courier New',monospace; font-size:11px; font-weight:700;
+  color:var(--win); pointer-events:none; z-index:215;
+  animation:purchase-spark-fly var(--dur,0.4s) ease-out forwards;
+}
+@keyframes purchase-sweep {
+  0%   { clip-path:inset(0 100% 0 0) }
+  45%  { clip-path:inset(0 0%   0 0) }
+  100% { clip-path:inset(0 0    0 100%) }
+}
+@keyframes purchase-spark-fly {
+  0%   { opacity:1; transform:translate(0,0) }
+  100% { opacity:0; transform:translate(var(--tx),var(--ty)) }
+}
 #stone-el {
   position:fixed;
   font-family:'Courier New',Courier,monospace;
@@ -1877,6 +1898,48 @@ function updateScore() {
   if ($shopModal.classList.contains('open')) updateShop();
 }
 
+function spawnPurchaseEffect() {
+  const rect = $shopArt.getBoundingClientRect();
+  if (!rect.width) return;
+
+  const cs = getComputedStyle($shopArt);
+
+  // Green sweep overlay on top of the art
+  const flash = document.createElement('div');
+  flash.className = 'purchase-flash';
+  flash.textContent = $shopArt.textContent;
+  flash.style.left        = rect.left + 'px';
+  flash.style.top         = rect.top  + 'px';
+  flash.style.width       = rect.width  + 'px';
+  flash.style.height      = rect.height + 'px';
+  flash.style.fontSize    = cs.fontSize;
+  flash.style.lineHeight  = cs.lineHeight;
+  document.body.appendChild(flash);
+  flash.addEventListener('animationend', () => flash.remove());
+
+  // ASCII sparks fly upward like a flame burst
+  const sparkChars = ['·', '˙', '.', '·', '+', '˙', '·', '.', '*', '·', '˙', '.'];
+  const cx = rect.left + rect.width  * 0.5;
+  const cy = rect.top  + rect.height * 0.6;
+  for (let i = 0; i < 14; i++) {
+    const sp = document.createElement('span');
+    sp.className = 'purchase-spark';
+    sp.textContent = sparkChars[i % sparkChars.length];
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.9;
+    const dist  = 22 + Math.random() * 58;
+    const tx    = (Math.cos(angle) * dist).toFixed(1);
+    const ty    = (Math.sin(angle) * dist - 8).toFixed(1);
+    const dur   = (0.3 + Math.random() * 0.35).toFixed(2);
+    sp.style.left  = (cx + (Math.random() - 0.5) * rect.width  * 0.55) + 'px';
+    sp.style.top   = (cy + (Math.random() - 0.5) * rect.height * 0.35) + 'px';
+    sp.style.setProperty('--tx', tx + 'px');
+    sp.style.setProperty('--ty', ty + 'px');
+    sp.style.setProperty('--dur', dur + 's');
+    document.body.appendChild(sp);
+    sp.addEventListener('animationend', () => sp.remove());
+  }
+}
+
 function spawnPlopPopup(fx, fy) {
   const el = document.createElement('div');
   el.className = 'plop-popup';
@@ -2077,6 +2140,7 @@ $shopUpgrade.addEventListener('click', () => {
     totalWins -= cost;
     shopLevels[shopIndex] = level + 1;
     writeShopLevels();
+    spawnPurchaseEffect();
     updateScore();
   }
 });
