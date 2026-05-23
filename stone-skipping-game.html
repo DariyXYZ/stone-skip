@@ -106,9 +106,9 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   animation:purchase-spark-fly var(--dur,0.4s) ease-out forwards;
 }
 @keyframes purchase-sweep {
-  0%   { clip-path:inset(0 100% 0 0) }
-  45%  { clip-path:inset(0 0%   0 0) }
-  100% { clip-path:inset(0 0    0 100%) }
+  0%   { clip-path:inset(100% 0 0 0) }
+  45%  { clip-path:inset(0 0 0 0) }
+  100% { clip-path:inset(0 0 100% 0) }
 }
 @keyframes purchase-spark-fly {
   0%   { opacity:1; transform:translate(0,0) }
@@ -1917,21 +1917,19 @@ function spawnPurchaseEffect() {
   document.body.appendChild(flash);
   flash.addEventListener('animationend', () => flash.remove());
 
-  // ASCII sparks fly upward like a flame burst
+  // ASCII sparks: start at bottom of stone art, fly upward and fade above it
   const sparkChars = ['·', '˙', '.', '·', '+', '˙', '·', '.', '*', '·', '˙', '.'];
-  const cx = rect.left + rect.width  * 0.5;
-  const cy = rect.top  + rect.height * 0.6;
   for (let i = 0; i < 14; i++) {
     const sp = document.createElement('span');
     sp.className = 'purchase-spark';
     sp.textContent = sparkChars[i % sparkChars.length];
-    const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.9;
-    const dist  = 22 + Math.random() * 58;
-    const tx    = (Math.cos(angle) * dist).toFixed(1);
-    const ty    = (Math.sin(angle) * dist - 8).toFixed(1);
-    const dur   = (0.3 + Math.random() * 0.35).toFixed(2);
-    sp.style.left  = (cx + (Math.random() - 0.5) * rect.width  * 0.55) + 'px';
-    sp.style.top   = (cy + (Math.random() - 0.5) * rect.height * 0.35) + 'px';
+    const startX = rect.left + rect.width  * (0.15 + Math.random() * 0.7);
+    const startY = rect.top  + rect.height * (0.65 + Math.random() * 0.3);
+    const tx     = ((Math.random() - 0.5) * 36).toFixed(1);
+    const ty     = (-(28 + Math.random() * 62)).toFixed(1);
+    const dur    = (0.32 + Math.random() * 0.36).toFixed(2);
+    sp.style.left = startX + 'px';
+    sp.style.top  = startY + 'px';
     sp.style.setProperty('--tx', tx + 'px');
     sp.style.setProperty('--ty', ty + 'px');
     sp.style.setProperty('--dur', dur + 's');
