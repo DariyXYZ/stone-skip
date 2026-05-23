@@ -106,21 +106,23 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 #shop-art.shop-art-flash {
   --art-gf: 0%; --art-gb: 0%;
   background: linear-gradient(to top,
-    var(--shop-strong) var(--art-gb),
-    var(--win)         var(--art-gb),
-    var(--win)         var(--art-gf),
-    var(--shop-strong) var(--art-gf)
+    var(--shop-strong) calc(var(--art-gb) - 14%),
+    var(--win)         calc(var(--art-gb) +  4%),
+    var(--win)         calc(var(--art-gf) -  4%),
+    var(--shop-strong) calc(var(--art-gf) + 18%)
   );
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   text-shadow: none;
-  animation: art-green-sweep 0.56s ease-in-out both;
+  animation: art-green-sweep 0.62s ease-out both;
 }
 @keyframes art-green-sweep {
-  0%   { --art-gf: 0%;   --art-gb: 0%   }
-  44%  { --art-gf: 112%; --art-gb: 0%   }
-  100% { --art-gf: 112%; --art-gb: 112% }
+  0%   { --art-gf:  0%;  --art-gb:  0%  }
+  18%  { --art-gf: 55%;  --art-gb:  0%  }
+  42%  { --art-gf: 116%; --art-gb:  8%  }
+  68%  { --art-gf: 116%; --art-gb: 62%  }
+  100% { --art-gf: 116%; --art-gb: 116% }
 }
 .purchase-spark {
   position:fixed;
