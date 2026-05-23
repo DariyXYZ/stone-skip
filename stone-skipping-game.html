@@ -93,22 +93,30 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   0%   { opacity:1; transform:translateY(0) }
   100% { opacity:0; transform:translateY(-22px) }
 }
-.purchase-flash {
-  position:fixed; white-space:pre;
-  font-family:'Courier New',monospace; font-weight:500;
-  color:var(--win); pointer-events:none; z-index:210;
-  animation:purchase-sweep 0.48s ease-out both;
+@property --art-green {
+  syntax: '<percentage>';
+  initial-value: 0%;
+  inherits: false;
+}
+#shop-art.shop-art-flash {
+  --art-green: 0%;
+  background: linear-gradient(to top, var(--win) var(--art-green), var(--shop-strong) var(--art-green));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+  animation: art-green-sweep 0.52s ease-out both;
+}
+@keyframes art-green-sweep {
+  0%   { --art-green: 0%   }
+  42%  { --art-green: 110% }
+  100% { --art-green: 0%   }
 }
 .purchase-spark {
   position:fixed;
   font-family:'Courier New',monospace; font-size:11px; font-weight:700;
   color:var(--win); pointer-events:none; z-index:215;
   animation:purchase-spark-fly var(--dur,0.4s) ease-out forwards;
-}
-@keyframes purchase-sweep {
-  0%   { clip-path:inset(100% 0 0 0) }
-  45%  { clip-path:inset(0 0 0 0) }
-  100% { clip-path:inset(0 0 100% 0) }
 }
 @keyframes purchase-spark-fly {
   0%   { opacity:1; transform:translate(0,0) }
@@ -1902,23 +1910,14 @@ function spawnPurchaseEffect() {
   const rect = $shopArt.getBoundingClientRect();
   if (!rect.width) return;
 
-  const cs = getComputedStyle($shopArt);
+  // Animate the art element itself — bottom-to-top green sweep via background-clip:text
+  $shopArt.classList.add('shop-art-flash');
+  $shopArt.addEventListener('animationend', () => {
+    $shopArt.classList.remove('shop-art-flash');
+  }, { once: true });
 
-  // Green sweep overlay on top of the art
-  const flash = document.createElement('div');
-  flash.className = 'purchase-flash';
-  flash.textContent = $shopArt.textContent;
-  flash.style.left        = rect.left + 'px';
-  flash.style.top         = rect.top  + 'px';
-  flash.style.width       = rect.width  + 'px';
-  flash.style.height      = rect.height + 'px';
-  flash.style.fontSize    = cs.fontSize;
-  flash.style.lineHeight  = cs.lineHeight;
-  document.body.appendChild(flash);
-  flash.addEventListener('animationend', () => flash.remove());
-
-  // ASCII sparks: start at bottom of stone art, fly upward and fade above it
-  const sparkChars = ['·', '˙', '.', '·', '+', '˙', '·', '.', '*', '·', '˙', '.'];
+  // ASCII sparks: start at bottom of art, fly straight upward
+  const sparkChars = ['\xB7', '˙', '.', '\xB7', '+', '˙', '\xB7', '.', '*', '\xB7', '˙', '.'];
   for (let i = 0; i < 14; i++) {
     const sp = document.createElement('span');
     sp.className = 'purchase-spark';
