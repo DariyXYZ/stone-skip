@@ -2639,6 +2639,7 @@ initLayout();
 syncChromeLabels();
 renderShopFrame();
 pickTarget();
+localStorage.removeItem(SHOP_LEVELS_KEY); // debug: fresh shop each reload
 readShopLevels();
 spawnStone();
 updateScore();
