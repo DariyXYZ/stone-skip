@@ -348,7 +348,7 @@ body[data-theme="day"] #win-ring {
 // render helpers, which keeps future in-game editing focused on data.
 const ASSET_PACK = {
   meta: {
-    version: 3,
+    version: 5,
     name: 'stone-skipping-game-core',
     splashCoverVersion: 5,
     shopFrameVersion: 2,
@@ -526,114 +526,159 @@ const ASSET_PACK = {
     ],
     shopStones: [
       {
-        id: 'wide-plop',
-        name: 'Wide Plop',
-        cost: 40,
-        desc: 'The stone lands with a wider wake. Useful when the last touch needs more presence.',
-        art: String.raw`         ~~~~~~~~~·
-      ~~·          ~~:
-    ~~               ~~:
-   ˙                   ~~:
-  ~:                    ~\
- ::                      \\
- ::                       :
- ::                      ::
- |:                      ::
- ::~                    ·:|
- : :~·                 ~~~
-  -·~~:~~           ·~~~/
-    :~~~\~·-~~~~~-~:~/~~
-      :~~~~~\~~~~~~/~
-         ··\~~~~~~~`
+        id: 'big-round-reward',
+        name: 'Big Round',
+        typeIndex: 0,
+        upgradeType: 'tierReward',
+        maxLevel: 3,
+        costs: [40, 70, 110],
+        descs: [
+          'Small targets pay +2 when this heavy round stone hits.',
+          'Small targets pay +2 and mid targets pay +3.',
+          'Small, mid, and high targets all pay one extra plop.',
+        ],
+        desc: 'Upgrade target rewards for the heavy round stone.',
+        art: String.raw`       _..·˙˙˙˙··~.
+     .˙            ˙˙.
+    ~˙                ˙.
+  .˙                    :
+ ·:                     ˙.
+.*                        ·
+:˙                        :
+::.                      ::
+:::                      ::
+˙::~                    ·:˙
+ * :~·                 ·~~
+  \·~~:~·           ·~~~/
+   ˙:~~~·~·-~~~~~-~:~*~~
+     ·:~~~~~+·~~~~·*~·˙
+        ˙··*~~~~~~*˙`
       },
       {
-        id: 'lucky-chance',
-        name: 'Lucky Chance',
-        cost: 55,
-        desc: 'One failed landing may correct itself by a single skip when the throw is close.',
-        art: String.raw`           ~.
-          /  \
+        id: 'small-round-read',
+        name: 'Small Round',
+        typeIndex: 1,
+        upgradeType: 'aimRead',
+        maxLevel: 3,
+        costs: [35, 65, 100],
+        descs: [
+          'Aim preview shows a loose plop range.',
+          'Aim preview narrows the expected plop range.',
+          'Aim preview shows the exact plop count.',
+        ],
+        desc: 'Read likely plop counts while aiming the small round stone.',
+        art: String.raw`         .·· ˙˙˙·.
+       :*         ·.
+      :~            +
+     │:              .
+     ::.             :
+     |:.            ·:
+      ~: .          ~~
+      *~:~·....  .·~/
+        ·~.......~·`
+      },
+      {
+        id: 'block-hard-stop',
+        name: 'Heavy Block',
+        typeIndex: 2,
+        upgradeType: 'hardStop',
+        maxLevel: 3,
+        costs: [45, 80, 120],
+        descs: [
+          'Stops on target when the block is already slowing down.',
+          'Stops on target earlier, before the final weak skips.',
+          'Stops hard on any target it reaches, great for small targets.',
+        ],
+        desc: 'Make the heavy block stop cleanly when it reaches a target.',
+        art: String.raw`    .··˙˙˙˙-˙˙˙˙˙˙˙˙˙~˙-.
+   .˙                   ˙·
+ ./                       |
+ .                        ::
+ :                         :
+.:                         |
+::                         +
+::                         :
+::                         :
+:#˙                       ·:
+\#˙                       ·|
+·#:˙                     ··:
+ :##˙. .               ··:#:
+ ˙~:#####·~~~·.......˙~##/˙
+    ˙~~~~~˙~~~~~~~~~-~*˙`
+      },
+      {
+        id: 'star-luck',
+        name: 'Lucky Star',
+        typeIndex: 3,
+        upgradeType: 'luckyChance',
+        maxLevel: 3,
+        costs: [55, 95, 140],
+        descs: [
+          'Near misses within 2 plops count for the star.',
+          'Near misses within 3 plops count for the star.',
+          'Near misses within 4 plops count for the star.',
+        ],
+        desc: 'Let the star correct bigger near misses into a win.',
+        art: String.raw`           ·.
+          ·  \
         ~/    ˙~
-   .·~~~·       ˙-~~~.
+   .·~~~·       +-~~~.
    :                 ·
-    ~:             :~
+    ·:             :~
      ~:\          -~
       :·           \
      ::·    ·/\~~   :
      .:~- ~~:  ~\\~~.
-     ·~~~˙         ~·`
+     ·~~*˙        *~·`
       },
       {
-        id: 'red-bite',
-        name: 'Red Bite',
-        cost: 70,
-        desc: 'The aim line bites harder into the water and the first impact feels heavier.',
-        art: String.raw`       ~~~~\
-      ~:   ·~\
-    ~/        \
-   ~:          \
-  ~:            :
- ~:             ~\
+        id: 'triangle-streak',
+        name: 'Triangle Streak',
+        typeIndex: 4,
+        upgradeType: 'streakMultiplier',
+        maxLevel: 3,
+        costs: [65, 110, 160],
+        descs: [
+          'A triangle hit prepares a green 2x triangle for the next throw.',
+          'A triangle hit prepares a green 3x triangle for the next throw.',
+          'A triangle hit prepares a green 4x triangle for the next throw.',
+        ],
+        desc: 'Reward two triangle hits in a row with a green multiplier stone.',
+        art: String.raw`       .:~~.
+      :·    ˙.
+    ·˙        ·
+   ·:          ·
+  ·˙            :
+ ·:              ˙
  :·               :
-/~-               ~/
-~:~~~           /~/~
- ~~\~~~~~~~~~~~~~~~
-  · ~~~~~~~~~~~~-`
+::                 :
+~                  ~
+\~:::-....-~..~~-.:/
+ *· ~~-~~~~-~~~~-*`
       },
       {
-        id: 'hook-turn',
-        name: 'Hook Turn',
-        cost: 90,
-        desc: 'A crooked stone that keeps a little sideways pull after each bounce.',
-        art: String.raw`         ·~~~˙~-~
-       :~˙       ˙·~
-      :~            ~
-      :              ~
-     ::              :
-     |:              :
-      ~\·          /~~
-      -~\~~    /~~~~/
-       :~~~\~~\~~~~:
-          :~~~~~~~`
-      },
-      {
-        id: 'long-skim',
-        name: 'Long Skim',
-        cost: 120,
-        desc: 'Longer surface travel with a narrow wake. Strong, but less forgiving.',
-        art: String.raw`     ~-~-~--~-~~~~~~~-
-   ~-~ ·           ···~~
-  /                    ~|
- :·                    ·::
- ::                      :
-:::                      |
-:::                      :
-:::                      :
-::|                      :
-:::·                    ·:
-\:~:                    ·:
-·|\~:                  ··:
- :: ~·\··            ··:|:
- ˙~:~~~~~·-~~·~~~~~~~~·|/˙
-    -~~~~~-~~~~~~~~~-~-`
-      },
-      {
-        id: 'flat-run',
-        name: 'Flat Run',
-        cost: 150,
-        desc: 'Low fast skips that hold speed across the water before dropping.',
-        art: String.raw`                     ~·~-
-                  ·/··   \.
-                ·/         :.
-               :·            :
-            ·/·               ~:
-            /:                 ~:
-            \|:                ::
-             \~\              /:|
-              \~~\         /:~/·
-                \~~~:  ·:~~-~
-                  \~~~:~~~~
-                    :·|~~`
+        id: 'diamond-fish',
+        name: 'Flat Diamond',
+        typeIndex: 5,
+        upgradeType: 'fishBonus',
+        maxLevel: 1,
+        costs: [60],
+        descs: [
+          'Gain +1 plop when the diamond clips a fish.',
+        ],
+        desc: 'The flat diamond scores a bonus plop for hitting fish.',
+        art: String.raw`                    ,~·.
+                  .˙    ˙.
+                ./        ˙.
+               :            +
+             :˙               ˙.
+           ,˙                   .
+           #:                    :
+            \::,               ./
+              \::           .~/·
+                *:,        ,*
+                  \#:    ~*
+                    *#%~*`
       },
     ],
   },
@@ -646,6 +691,7 @@ function cloneAsset(value) {
 }
 
 const ASSET_STORAGE_KEY = 'stone-skipping-game-asset-patch-v1';
+const SHOP_LEVELS_KEY = 'stone-skipping-game-shop-levels-v1';
 const SPLASH_COVER_VERSION = ASSET_PACK.meta.splashCoverVersion;
 const SHOP_FRAME_VERSION = ASSET_PACK.meta.shopFrameVersion;
 const SPLASH_COVER_BACKUP_KEY = 'stone-skipping-game-splash-cover-backup-v1';
@@ -883,10 +929,10 @@ function syncAssetConsumers() {
   if (typeof STONE_TYPES !== 'undefined') STONE_TYPES = assets.entities.stones;
   if (typeof SHOP_STONES !== 'undefined') SHOP_STONES = assets.entities.shopStones;
   if (typeof ACHIEVABLE !== 'undefined') ACHIEVABLE = computeAchievable();
-  if (typeof shopPurchased !== 'undefined') {
-    while (shopPurchased.length < assets.entities.shopStones.length) shopPurchased.push(false);
-    shopPurchased.length = assets.entities.shopStones.length;
-    if (typeof shopIndex !== 'undefined') shopIndex = Math.min(shopIndex, Math.max(0, shopPurchased.length - 1));
+  if (typeof shopLevels !== 'undefined') {
+    while (shopLevels.length < assets.entities.shopStones.length) shopLevels.push(0);
+    shopLevels.length = assets.entities.shopStones.length;
+    if (typeof shopIndex !== 'undefined') shopIndex = Math.min(shopIndex, Math.max(0, shopLevels.length - 1));
   }
   syncChromeLabels();
   renderShopFrame();
@@ -1236,7 +1282,8 @@ function updateChallenge() {
   if (!challengeTargets.length) return;
   const board = challengeTargets.map((item, index) => {
     const hit = challengeHit && challengeHit.index === index ? ' hit' : '';
-    return `<span class="ch-card${hit}">[ ${item.value} ]<span class="ch-reward">+${item.reward}</span></span>`;
+    const reward = typeof stone !== 'undefined' ? adjustedReward(item.reward) : item.reward;
+    return `<span class="ch-card${hit}">[ ${item.value} ]<span class="ch-reward">+${reward}</span></span>`;
   }).join('');
   if (challengeWon && (stone.state === 'sinking' || stone.state === 'dead')) {
     $challenge.innerHTML =
@@ -1432,6 +1479,14 @@ function computeAchievable() {
 }
 let ACHIEVABLE = computeAchievable();
 
+function predictedSkipCountFromPull(pullDist, type = stone) {
+  const eff = VX_DAMP * type.vxDampMod;
+  let cur = pullDist * POWER * type.powerMod;
+  let n = 0;
+  do { cur *= eff; n++; } while (cur >= MIN_SPD && n < 99);
+  return Math.max(1, n);
+}
+
 const CHALLENGE_TIERS = [
   { key: 'small', min: 6,  max: 15, reward: 1 },
   { key: 'mid',   min: 16, max: 34, reward: 2 },
@@ -1441,9 +1496,55 @@ const CHALLENGE_TIERS = [
 let challengeTargets = [];
 let challengeHit = null;
 let challengeWon = false;
-let totalWins   = 0;
+let totalWins   = new URLSearchParams(location.search).has('debug') ? 1000 : 0;
 let shopIndex   = 0;
-const shopPurchased = Array(SHOP_STONES.length).fill(false);
+const shopLevels = Array(SHOP_STONES.length).fill(0);
+let pendingTriangleBonus = 0;
+
+function readShopLevels() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SHOP_LEVELS_KEY) || '[]');
+    if (!Array.isArray(raw)) return;
+    raw.forEach((value, index) => {
+      shopLevels[index] = Math.max(0, Number(value) || 0);
+    });
+  } catch {}
+}
+
+function writeShopLevels() {
+  try { localStorage.setItem(SHOP_LEVELS_KEY, JSON.stringify(shopLevels)); } catch {}
+}
+
+function shopItemForType(typeIndex) {
+  return SHOP_STONES.find((item, index) => {
+    item._shopIndex = index;
+    return item.typeIndex === typeIndex;
+  });
+}
+
+function upgradeLevel(typeIndex) {
+  const item = shopItemForType(typeIndex);
+  return item ? shopLevels[item._shopIndex] || 0 : 0;
+}
+
+function levelGlyphs(item, level = shopLevels[shopIndex] || 0) {
+  const type = STONE_TYPES[item.typeIndex] || {};
+  const filled = type.char || '#';
+  const hollow = type.hollow || '.';
+  const glyphs = [...filled.repeat(level), ...hollow.repeat(Math.max(0, (item.maxLevel || 1) - level))].join(' ');
+  return `{ ${glyphs} }`;
+}
+
+function adjustedReward(baseReward) {
+  if (stone.typeIndex !== 0) return baseReward;
+  const level = upgradeLevel(0);
+  return baseReward + (level >= baseReward ? 1 : 0);
+}
+
+function currentLuckyTolerance() {
+  const level = stone.typeIndex === 3 ? upgradeLevel(3) : 0;
+  return level > 0 ? level + 1 : 0;
+}
 
 function randomTargetForTier(tier, previous) {
   const min = tier.min;
@@ -1473,19 +1574,24 @@ function pickTarget(index = null) {
   challengeWon = false;
 }
 
-function findChallengeTarget(skipN) {
+function findChallengeTarget(skipN, tolerance = 0) {
   return challengeTargets
-    .map((target, index) => ({ target, index }))
-    .filter(item => item.target.value === skipN)
-    .sort((a, b) => b.target.reward - a.target.reward)[0] || null;
+    .map((target, index) => ({ target, index, miss: Math.abs(target.value - skipN) }))
+    .filter(item => item.miss <= tolerance)
+    .sort((a, b) => a.miss - b.miss || b.target.reward - a.target.reward)[0] || null;
 }
 
 function awardChallenge(match, drop) {
   challengeHit = { ...match.target, index: match.index };
   challengeWon = true;
-  totalWins += match.target.reward;
+  totalWins += adjustedReward(match.target.reward) * (stone.bonusMultiplier || 1);
+  if (match.miss) stone.skipN = match.target.value;
   drop.isWin = true;
   winDrop = drop;
+  if (stone.typeIndex === 4 && !stone.bonusMultiplier) {
+    const level = upgradeLevel(4);
+    if (level > 0) pendingTriangleBonus = level + 1;
+  }
   playWin();
   updateScore();
 }
@@ -1497,6 +1603,7 @@ const stone = {
   x: 0, y: 0, vx: 0, vy: 0,
   spawnX: 0, spawnY: 0,
   char: '●', hollow: '○',
+  typeIndex: 1, bonusMultiplier: 0,
   powerMod: 1, vxDampMod: 1, bounceDampMod: 1, splashR: 0.33,
   skipN: 0, skipTimer: 0, curveDir: 1,
   sinkT: 0, deadT: 0, flashT: 0,
@@ -1507,9 +1614,14 @@ function spawnStone() {
   stone.spawnX = Math.round(COLS * (portrait ? 0.50 : 0.08));
   stone.spawnY = Math.round(ROWS * (portrait ? 0.72 : 0.50));
   stone.x = stone.spawnX; stone.y = stone.spawnY;
-  const type = STONE_TYPES[Math.random() * STONE_TYPES.length | 0];
+  const forcedTriangle = pendingTriangleBonus > 0;
+  const typeIndex = forcedTriangle ? 4 : (Math.random() * STONE_TYPES.length | 0);
+  const type = STONE_TYPES[typeIndex];
   stone.char         = type.char;
   stone.hollow       = type.hollow;
+  stone.typeIndex     = typeIndex;
+  stone.bonusMultiplier = forcedTriangle ? pendingTriangleBonus : 0;
+  pendingTriangleBonus = 0;
   stone.powerMod      = type.power;
   stone.vxDampMod     = type.vxDamp;
   stone.bounceDampMod = type.bounceDamp;
@@ -1648,6 +1760,7 @@ function updateStone(dt) {
 
     stone.x += stone.vx * dt;
     stone.y += stone.vy * dt;
+    checkFishBonusHit();
 
     if (stone.skipTimer <= 0) {
       const spd          = Math.sqrt(stone.vx * stone.vx + stone.vy * stone.vy);
@@ -1664,7 +1777,7 @@ function updateStone(dt) {
       const ndy = sin * stone.vx + cos * stone.vy;
 
       // One-skip forgiveness: a near miss can still land on one visible target.
-      const currentMatch = findChallengeTarget(stone.skipN);
+      const currentMatch = findChallengeTarget(stone.skipN, currentLuckyTolerance());
 
       if (!challengeWon && currentMatch && spdNext < MIN_SPD) {
         stone.vx = stone.vy = 0;
@@ -1685,6 +1798,23 @@ function updateStone(dt) {
         if (stone.skipN > bestSkips) bestSkips = stone.skipN;
         updateScore();
 
+        const hardStopLevel = stone.typeIndex === 2 ? upgradeLevel(2) : 0;
+        const hardStopMatch = hardStopLevel ? findChallengeTarget(stone.skipN) : null;
+        const hardStopReady = hardStopMatch && (
+          hardStopLevel >= 3
+          || (hardStopLevel >= 2 && spdNext < MIN_SPD * 2.2)
+          || spdNext < MIN_SPD * 1.4
+        );
+        if (!challengeWon && hardStopReady) {
+          stone.vx = stone.vy = 0;
+          stone.state = 'sinking';
+          const sinkDrop = new Drop(stone.x, stone.y, t, 1.05, DECAY_D * 0.55, stone.splashR * 1.35);
+          drops.push(sinkDrop);
+          playSink();
+          awardChallenge(hardStopMatch, sinkDrop);
+          return;
+        }
+
         const nextMatch = findChallengeTarget(stone.skipN + 1);
         if (!challengeWon && spdNext < MIN_SPD && nextMatch) {
           // One-skip forgiveness: if a target is next, give exactly one more skip.
@@ -1697,7 +1827,7 @@ function updateStone(dt) {
           const sinkDrop = new Drop(stone.x, stone.y, t, 0.9, DECAY_D * 0.65, stone.splashR * 1.2);
           drops.push(sinkDrop);
           playSink();
-          const landedMatch = findChallengeTarget(stone.skipN);
+          const landedMatch = findChallengeTarget(stone.skipN, currentLuckyTolerance());
           if (landedMatch && !challengeWon) {
             awardChallenge(landedMatch, sinkDrop);
           }
@@ -1729,6 +1859,21 @@ function updateStone(dt) {
 function updateScore() {
   $score.textContent = `${totalWins} ${assets.glyphs.currency}`;
   if ($shopModal.classList.contains('open')) updateShop();
+}
+
+function checkFishBonusHit() {
+  if (stone.typeIndex !== 5 || upgradeLevel(5) < 1) return;
+  for (const f of fish) {
+    if (f.state === 'done' || f.hitByStone) continue;
+    const dx = f.x - stone.x, dy = f.y - stone.y;
+    if (Math.sqrt(dx * dx + dy * dy) > 2.4 + f.sz * 2.2) continue;
+    f.hitByStone = true;
+    f.state = 'fleeing';
+    totalWins += 1;
+    drops.push(new Drop(stone.x, stone.y, t, 0.55, DECAY_D * 0.8, 0.28));
+    updateScore();
+    break;
+  }
 }
 
 function formatShopArt(art) {
@@ -1782,6 +1927,45 @@ function formatShopArt(art) {
   return out.map(row => row.join('').slice(0, targetW).padEnd(targetW, ' ')).join('\n');
 }
 
+function generatedShopStoneArt(item) {
+  const type = STONE_TYPES[item.typeIndex] || STONE_TYPES[1] || {};
+  const solid = type.char || '#';
+  const hollow = type.hollow || '.';
+  const line = '~'.repeat(9);
+  const rows = [
+    `       ${line}`,
+    `    ~~${hollow}       ${hollow}~~`,
+    `   ~     ${hollow} ${hollow}     ~`,
+    `  ~       ${solid}       ~`,
+    `  :    ${hollow}${solid}${hollow}    :`,
+    `  ~       ${solid}       ~`,
+    `   ~     ${hollow} ${hollow}     ~`,
+    `    ~~${hollow}       ${hollow}~~`,
+    `       ${line}`,
+  ];
+  if (item.typeIndex === 3) {
+    rows[3] = `  ~      /${solid}\\      ~`;
+    rows[4] = `  :   ${hollow}-${solid}-${hollow}   :`;
+    rows[5] = `  ~      \\${solid}/      ~`;
+  } else if (item.typeIndex === 4) {
+    rows[2] = `   ~       ${solid}       ~`;
+    rows[3] = `  ~       / \\      ~`;
+    rows[4] = `  :      /${hollow}${solid}${hollow}\\     :`;
+    rows[5] = `  ~     /_____\\    ~`;
+  } else if (item.typeIndex === 5) {
+    rows[3] = `  ~      /${solid}\\      ~`;
+    rows[4] = `  :   < ${hollow}${solid}${hollow} >  :`;
+    rows[5] = `  ~      \\${solid}/      ~`;
+  } else if (item.typeIndex === 2) {
+    rows[2] = `   ~    ${hollow}${hollow}${hollow}${hollow}${hollow}    ~`;
+    rows[3] = `  ~     ${hollow}   ${hollow}    ~`;
+    rows[4] = `  :     ${hollow} ${solid} ${hollow}    :`;
+    rows[5] = `  ~     ${hollow}   ${hollow}    ~`;
+    rows[6] = `   ~    ${hollow}${hollow}${hollow}${hollow}${hollow}    ~`;
+  }
+  return rows.join('\n');
+}
+
 function renderShopFrame() {
   if (!$shopFrame || !$shopPanel) return;
   const raster = assets.components.frames.shopRaster;
@@ -1817,13 +2001,16 @@ function renderShopFrame() {
 function updateShop() {
   const item = SHOP_STONES[shopIndex];
   if (!item) return;
-  const missing = Math.max(0, item.cost - totalWins);
-  const purchased = !!shopPurchased[shopIndex];
-  $shopArt.textContent = formatShopArt(item.art);
-  $shopName.textContent = item.name;
-  $shopPrice.textContent = `${item.cost} ${assets.glyphs.currency}`;
-  $shopDesc.textContent = item.desc;
-  $shopUpgrade.textContent = purchased
+  const level = shopLevels[shopIndex] || 0;
+  const maxLevel = item.maxLevel || 1;
+  const complete = level >= maxLevel;
+  const cost = item.costs?.[level] ?? item.cost ?? 0;
+  const missing = Math.max(0, cost - totalWins);
+  $shopArt.textContent = formatShopArt(item.art || generatedShopStoneArt(item));
+  $shopName.textContent = `${item.name} ${levelGlyphs(item, level)}`;
+  $shopPrice.textContent = complete ? 'max' : `${cost} ${assets.glyphs.currency}`;
+  $shopDesc.textContent = item.descs?.[Math.min(level, (item.descs?.length || 1) - 1)] || item.desc;
+  $shopUpgrade.textContent = complete
     ? renderButton(assets.components.labels.purchased)
     : renderButton(missing
       ? `${assets.components.labels.need} ${missing} ${assets.glyphs.currency}`
@@ -1841,6 +2028,7 @@ function openShop() {
 function closeShop() {
   $shopModal.classList.remove('open');
   $shopModal.setAttribute('aria-hidden', 'true');
+  $shopButton.blur();
 }
 
 function shiftShop(dir) {
@@ -1854,9 +2042,12 @@ $shopPrev.addEventListener('click', () => shiftShop(-1));
 $shopNext.addEventListener('click', () => shiftShop(1));
 $shopUpgrade.addEventListener('click', () => {
   const item = SHOP_STONES[shopIndex];
-  if (shopPurchased[shopIndex]) return;
-  if (totalWins >= item.cost) {
-    shopPurchased[shopIndex] = true;
+  const level = shopLevels[shopIndex] || 0;
+  if (level >= (item.maxLevel || 1)) return;
+  const cost = item.costs?.[level] ?? item.cost ?? 0;
+  if (totalWins >= cost) {
+    shopLevels[shopIndex] = level + 1;
+    writeShopLevels();
     updateShop();
   }
 });
@@ -1984,8 +2175,10 @@ function renderStone() {
   if (sch) {
     $stoneEl.style.left = ((stone.x | 0) * CW) + 'px';
     $stoneEl.style.top  = ((stone.y | 0) * CH) + 'px';
+    $stoneEl.style.color = stone.bonusMultiplier ? 'var(--win)' : 'var(--stone)';
     $stoneEl.textContent = sch;
   } else {
+    $stoneEl.style.color = 'var(--stone)';
     $stoneEl.textContent = '';
   }
 }
@@ -2030,6 +2223,21 @@ function renderBand() {
     if (e2 <  adx) { err += adx; y += sy; }
   }
   mark(x0, y0, '+');  // anchor marker
+
+  if (stone.typeIndex === 1) {
+    const readLevel = upgradeLevel(1);
+    if (readLevel > 0) {
+      const pull = Math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2);
+      const predicted = predictedSkipCountFromPull(pull);
+      const spread = readLevel === 1 ? 3 : readLevel === 2 ? 1 : 0;
+      const label = spread
+        ? `${Math.max(1, predicted - spread)}-${predicted + spread}`
+        : `${predicted}`;
+      const tx = Math.max(0, Math.min(COLS - label.length, x1 + 2));
+      const ty = Math.max(0, Math.min(ROWS - 1, y1 - 1));
+      for (let i = 0; i < label.length; i++) mark(tx + i, ty, label[i]);
+    }
+  }
 
   const lines = [];
   for (let ry = 0; ry < ROWS; ry++) {
@@ -2303,6 +2511,7 @@ initLayout();
 syncChromeLabels();
 renderShopFrame();
 pickTarget();
+readShopLevels();
 spawnStone();
 updateScore();
 updateChallenge();

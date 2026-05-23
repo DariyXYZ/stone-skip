@@ -508,7 +508,7 @@ function editorFallbackAssets() {
   const stored = upgradeStoredAssetPatch(readStoredAssetPatch());
   const base = defaultAssetsFromGameFrame() || {
     meta: {
-      version: 3,
+      version: 5,
       name: 'Stone Skipping editor fallback',
       splashCoverVersion: SPLASH_COVER_VERSION,
       shopFrameVersion: SHOP_FRAME_VERSION,
@@ -791,7 +791,7 @@ function buildRefs() {
       type:'shop-item',
       index,
       label:item.name,
-      sub:String(item.cost),
+      sub:String(item.costs?.[0] ?? item.cost ?? ''),
       get:() => assets.entities.shopStones[index].art,
       set:value => { assets.entities.shopStones[index].art = value.replace(/\r/g, ''); },
     })),
@@ -828,7 +828,9 @@ function syncFromUi() {
   if (ref.type === 'shop-item') {
     const item = assets.entities.shopStones[ref.index];
     item.name = nameEl.value;
-    item.cost = Number(costEl.value) || 0;
+    const costVal = Number(costEl.value) || 0;
+    if (Array.isArray(item.costs)) item.costs[0] = costVal;
+    else item.cost = costVal;
     item.desc = descEl.value;
   }
 }
@@ -865,8 +867,8 @@ function renderEditor() {
   if (ref.type === 'shop-item') {
     const item = assets.entities.shopStones[ref.index];
     nameEl.value = item.name;
-    costEl.value = item.cost;
-    descEl.value = item.desc;
+    costEl.value = Array.isArray(item.costs) ? (item.costs[0] ?? 0) : (item.cost ?? 0);
+    descEl.value = item.desc ?? (Array.isArray(item.descs) ? item.descs[0] : '') ?? '';
   }
   document.getElementById('asset-size').textContent = artStats(canvasEl.value);
   renderTabs();
@@ -885,7 +887,7 @@ function renderButton(label) {
 function makePatch() {
   return {
     meta: {
-      version: assets.meta?.version || 3,
+      version: assets.meta?.version || 5,
       name: assets.meta?.name || 'stone-skipping-game-core',
       splashCoverVersion: SPLASH_COVER_VERSION,
       shopFrameVersion: assets.meta?.shopFrameVersion || SHOP_FRAME_VERSION,
@@ -937,7 +939,7 @@ function renderPreview() {
       ? assets.components.frames.shopRaster
       : defaultShopFrameRaster();
   document.getElementById('preview-title').textContent = item.name;
-  document.getElementById('preview-price').textContent = `${item.cost} ${assets.glyphs.currency}`;
+  document.getElementById('preview-price').textContent = `${Array.isArray(item.costs) ? (item.costs[0] ?? 0) : (item.cost ?? 0)} ${assets.glyphs.currency}`;
   document.getElementById('preview-art').textContent = gameFormatShopArt(item.art);
   document.getElementById('preview-desc').textContent = item.desc;
   document.getElementById('preview-actions').textContent =
