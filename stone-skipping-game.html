@@ -2046,9 +2046,10 @@ $shopUpgrade.addEventListener('click', () => {
   if (level >= (item.maxLevel || 1)) return;
   const cost = item.costs?.[level] ?? item.cost ?? 0;
   if (totalWins >= cost) {
+    totalWins -= cost;
     shopLevels[shopIndex] = level + 1;
     writeShopLevels();
-    updateShop();
+    updateScore();
   }
 });
 
