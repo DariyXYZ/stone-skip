@@ -120,19 +120,34 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   transition: text-shadow .14s linear;
 }
 @keyframes shop-art-charge-shake {
-  0%, 14% { transform: translate(0,0) }
-  22% { transform: translate(.2px,0) }
-  34% { transform: translate(-.3px,.1px) }
-  46% { transform: translate(.45px,-.15px) }
-  58% { transform: translate(-.65px,.25px) }
-  68% { transform: translate(.9px,-.35px) }
-  76% { transform: translate(-1.15px,.45px) }
-  82% { transform: translate(1.35px,-.55px) }
-  86% { transform: translate(-1.7px,.7px) }
-  89% { transform: translate(1.95px,-.8px) }
-  92% { transform: translate(-2.2px,.9px) scale(1.012) }
-  95% { transform: translate(1.3px,-.5px) scale(1.018) }
-  100% { transform: translate(0,0) scale(1) }
+  0% { transform: translate(0,0) }
+  4% { transform: translate(.12px,-.04px) }
+  8% { transform: translate(-.18px,.07px) }
+  12% { transform: translate(.24px,-.09px) }
+  16% { transform: translate(-.3px,.12px) }
+  20% { transform: translate(.38px,-.15px) }
+  24% { transform: translate(-.47px,.19px) }
+  28% { transform: translate(.57px,-.23px) }
+  32% { transform: translate(-.69px,.27px) }
+  36% { transform: translate(.82px,-.32px) }
+  40% { transform: translate(-.96px,.38px) }
+  44% { transform: translate(1.12px,-.44px) }
+  48% { transform: translate(-1.28px,.5px) }
+  52% { transform: translate(1.45px,-.57px) }
+  56% { transform: translate(-1.62px,.64px) }
+  60% { transform: translate(1.82px,-.72px) }
+  63% { transform: translate(-2px,.79px) scale(1.004) }
+  66% { transform: translate(2.18px,-.86px) scale(1.007) }
+  68.5% { transform: translate(-2.36px,.93px) scale(1.01) }
+  70.5% { transform: translate(2.54px,-1px) scale(1.013) }
+  72.2% { transform: translate(-2.72px,1.07px) scale(1.016) }
+  73.6% { transform: translate(2.9px,-1.13px) scale(1.018) }
+  74.8% { transform: translate(-3.05px,1.18px) scale(1.02) }
+  75.8% { transform: translate(3.18px,-1.22px) scale(1.021) }
+  76.7% { transform: translate(-3.28px,1.25px) scale(1.022) }
+  77.4% { transform: translate(3.36px,-1.28px) scale(1.022) }
+  78% { transform: translate(-3.4px,1.3px) scale(1.022) }
+  79%, 100% { transform: translate(0,0) scale(1) }
 }
 .purchase-spark {
   position:fixed;
@@ -1563,7 +1578,7 @@ const CHALLENGE_TIERS = [
 let challengeTargets = [];
 let challengeHit = null;
 let challengeWon = false;
-let totalWins   = 0;
+let totalWins   = 5000;
 let shopIndex   = 0;
 const shopLevels = Array(SHOP_STONES.length).fill(0);
 let pendingTriangleBonus = 0;
@@ -1998,12 +2013,11 @@ function spawnPurchaseEffect() {
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
     cells.forEach(cell => cell.classList.add('charge-green'));
-    $shopArt.classList.add('shop-art-glow');
   }, 1560));
 
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
-    $shopArt.classList.add('shop-art-burst');
+    $shopArt.classList.add('shop-art-glow', 'shop-art-burst');
   }, 1780));
 
   timers.push(setTimeout(() => {
@@ -2026,7 +2040,7 @@ function spawnPurchaseEffect() {
         sparkChars[(i + Math.floor(Math.random() * sparkChars.length)) % sparkChars.length]
       );
     }
-  }, 1850));
+  }, 1810));
 
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
