@@ -93,36 +93,46 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   0%   { opacity:1; transform:translateY(0) }
   100% { opacity:0; transform:translateY(-22px) }
 }
-@property --art-gf {
-  syntax: '<percentage>';
-  initial-value: 0%;
-  inherits: false;
+#shop-art.shop-art-purchase {
+  color: var(--shop-strong);
+  animation: shop-art-charge-shake 2.28s linear both;
+  will-change: transform;
 }
-@property --art-gb {
-  syntax: '<percentage>';
-  initial-value: 0%;
-  inherits: false;
-}
-#shop-art.shop-art-flash {
-  --art-gf: 0%; --art-gb: 0%;
-  background: linear-gradient(to top,
-    var(--shop-strong) calc(var(--art-gb) - 14%),
-    var(--win)         calc(var(--art-gb) +  4%),
-    var(--win)         calc(var(--art-gf) -  4%),
-    var(--shop-strong) calc(var(--art-gf) + 18%)
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+#shop-art .purchase-cell {
+  color: var(--shop-strong);
+  display: inline-block;
+  min-width: 1ch;
   text-shadow: none;
-  animation: art-green-sweep 0.62s ease-out both;
+  transition: text-shadow .12s linear;
 }
-@keyframes art-green-sweep {
-  0%   { --art-gf:  0%;  --art-gb:  0%  }
-  18%  { --art-gf: 55%;  --art-gb:  0%  }
-  42%  { --art-gf: 116%; --art-gb:  8%  }
-  68%  { --art-gf: 116%; --art-gb: 62%  }
-  100% { --art-gf: 116%; --art-gb: 116% }
+#shop-art .purchase-cell.charge-green {
+  color: var(--win);
+}
+#shop-art.shop-art-glow .purchase-cell.charge-green {
+  text-shadow: 0 0 4px var(--win), 0 0 9px var(--win);
+}
+#shop-art.shop-art-burst .purchase-cell.charge-green {
+  text-shadow: 0 0 7px var(--win), 0 0 15px var(--win), 0 0 24px var(--win);
+}
+#shop-art.shop-art-resolve .purchase-cell {
+  color: var(--shop-strong);
+  text-shadow: none;
+  transition: text-shadow .14s linear;
+}
+@keyframes shop-art-charge-shake {
+  0%, 14% { transform: translate(0,0) }
+  22% { transform: translate(.2px,0) }
+  34% { transform: translate(-.3px,.1px) }
+  46% { transform: translate(.45px,-.15px) }
+  58% { transform: translate(-.65px,.25px) }
+  68% { transform: translate(.9px,-.35px) }
+  76% { transform: translate(-1.15px,.45px) }
+  82% { transform: translate(1.35px,-.55px) }
+  86% { transform: translate(-1.7px,.7px) }
+  89% { transform: translate(1.95px,-.8px) }
+  92% { transform: translate(-2.2px,.9px) scale(1.012) }
+  95% { transform: translate(1.3px,-.5px) scale(1.018) }
+  100% { transform: translate(0,0) scale(1) }
 }
 .purchase-spark {
   position:fixed;
@@ -1553,7 +1563,7 @@ const CHALLENGE_TIERS = [
 let challengeTargets = [];
 let challengeHit = null;
 let challengeWon = false;
-let totalWins   = 5000;
+let totalWins   = 0;
 let shopIndex   = 0;
 const shopLevels = Array(SHOP_STONES.length).fill(0);
 let pendingTriangleBonus = 0;
@@ -1918,39 +1928,116 @@ function updateScore() {
   if ($shopModal.classList.contains('open')) updateShop();
 }
 
+function purchaseChargeDelay(row, col, rows, cols) {
+  const y = rows <= 1 ? 0 : (rows - 1 - row) / (rows - 1);
+  const x = cols <= 1 ? 0 : col / (cols - 1);
+  const wobble = Math.sin(col * 1.7 + row * 0.8) * 120
+    + Math.cos(col * 0.53 - row * 1.35) * 95
+    + ((row * 37 + col * 19) % 11 - 5) * 18;
+  return Math.max(40, Math.min(1580, 95 + y * 1380 + wobble + Math.sin(x * Math.PI * 2) * 55));
+}
+
+function buildPurchaseCells(text) {
+  const lines = text.replace(/\r/g, '').split('\n');
+  const cols = Math.max(1, ...lines.map(line => line.length));
+  const frag = document.createDocumentFragment();
+  const cells = [];
+  lines.forEach((line, row) => {
+    [...line].forEach((ch, col) => {
+      const span = document.createElement('span');
+      span.className = 'purchase-cell';
+      span.textContent = ch === ' ' ? '\u00A0' : ch;
+      span.dataset.delay = purchaseChargeDelay(row, col, lines.length, cols).toFixed(0);
+      frag.appendChild(span);
+      if (ch !== ' ') cells.push(span);
+    });
+    if (row < lines.length - 1) frag.appendChild(document.createTextNode('\n'));
+  });
+  $shopArt.textContent = '';
+  $shopArt.appendChild(frag);
+  return cells;
+}
+
+function spawnPurchaseSpark(x, y, tx, ty, dur, char) {
+  const sp = document.createElement('span');
+  sp.className = 'purchase-spark';
+  sp.textContent = char;
+  sp.style.left = x + 'px';
+  sp.style.top = y + 'px';
+  sp.style.setProperty('--tx', tx + 'px');
+  sp.style.setProperty('--ty', ty + 'px');
+  sp.style.setProperty('--dur', dur + 's');
+  document.body.appendChild(sp);
+  sp.addEventListener('animationend', () => sp.remove());
+}
+
 function spawnPurchaseEffect() {
   const rect = $shopArt.getBoundingClientRect();
   if (!rect.width) return;
+  ($shopArt._purchaseTimers || []).forEach(clearTimeout);
+  const token = Symbol('purchase');
+  $shopArt._purchaseToken = token;
+  const originalText = $shopArt.textContent;
+  const cells = buildPurchaseCells(originalText);
+  const timers = [];
+  $shopArt._purchaseTimers = timers;
 
-  // Animate the art element itself — bottom-to-top green sweep via background-clip:text
-  $shopArt.classList.add('shop-art-flash');
-  $shopArt.addEventListener('animationend', () => {
-    $shopArt.classList.remove('shop-art-flash');
-  }, { once: true });
+  $shopArt.classList.remove('shop-art-purchase', 'shop-art-glow', 'shop-art-burst', 'shop-art-resolve');
+  void $shopArt.offsetWidth;
+  $shopArt.classList.add('shop-art-purchase');
 
-  // Sparks spawn progressively at the rising green front
-  const sparkChars = ['\xB7', '˙', '.', '\xB7', '+', '˙', '\xB7', '.', '*', '\xB7', '˙', '.'];
-  const FRONT_DUR = 0.56 * 0.44 * 1000; // ms for front to reach top
-  const COUNT = 12;
-  for (let i = 0; i < COUNT; i++) {
-    const progress = i / (COUNT - 1);
-    setTimeout(() => {
-      const sp = document.createElement('span');
-      sp.className = 'purchase-spark';
-      sp.textContent = sparkChars[i % sparkChars.length];
-      const frontY = rect.bottom - progress * rect.height;
-      const tx  = ((Math.random() - 0.5) * 32).toFixed(1);
-      const ty  = (-(14 + Math.random() * 44)).toFixed(1);
-      const dur = (0.24 + Math.random() * 0.28).toFixed(2);
-      sp.style.left = (rect.left + rect.width * (0.15 + Math.random() * 0.7)) + 'px';
-      sp.style.top  = (frontY + (Math.random() - 0.5) * rect.height * 0.08) + 'px';
-      sp.style.setProperty('--tx', tx + 'px');
-      sp.style.setProperty('--ty', ty + 'px');
-      sp.style.setProperty('--dur', dur + 's');
-      document.body.appendChild(sp);
-      sp.addEventListener('animationend', () => sp.remove());
-    }, progress * FRONT_DUR);
-  }
+  const sparkChars = ['\xB7', '.', '+', '\xB7', '*', '.', '\xB7', '+', '.', '*', '\xB7', '.'];
+
+  cells.forEach(cell => {
+    timers.push(setTimeout(() => {
+      if ($shopArt._purchaseToken !== token) return;
+      cell.classList.add('charge-green');
+    }, Number(cell.dataset.delay)));
+  });
+
+  timers.push(setTimeout(() => {
+    if ($shopArt._purchaseToken !== token) return;
+    cells.forEach(cell => cell.classList.add('charge-green'));
+    $shopArt.classList.add('shop-art-glow');
+  }, 1560));
+
+  timers.push(setTimeout(() => {
+    if ($shopArt._purchaseToken !== token) return;
+    $shopArt.classList.add('shop-art-burst');
+  }, 1780));
+
+  timers.push(setTimeout(() => {
+    if ($shopArt._purchaseToken !== token) return;
+    const liveCells = cells.filter(cell => cell.isConnected);
+    const burstCount = Math.min(34, Math.max(18, Math.floor(liveCells.length * 0.45)));
+    for (let i = 0; i < burstCount; i++) {
+      const cell = liveCells[Math.floor(Math.random() * liveCells.length)];
+      if (!cell) continue;
+      const cr = cell.getBoundingClientRect();
+      const tx = ((Math.random() - 0.5) * 44).toFixed(1);
+      const ty = (-(52 + Math.random() * 88)).toFixed(1);
+      const dur = (0.38 + Math.random() * 0.26).toFixed(2);
+      spawnPurchaseSpark(
+        cr.left + cr.width * 0.5,
+        cr.top + cr.height * 0.45,
+        tx,
+        ty,
+        dur,
+        sparkChars[(i + Math.floor(Math.random() * sparkChars.length)) % sparkChars.length]
+      );
+    }
+  }, 1850));
+
+  timers.push(setTimeout(() => {
+    if ($shopArt._purchaseToken !== token) return;
+    $shopArt.classList.add('shop-art-resolve');
+  }, 1980));
+  timers.push(setTimeout(() => {
+    if ($shopArt._purchaseToken !== token) return;
+    $shopArt.classList.remove('shop-art-purchase', 'shop-art-glow', 'shop-art-burst', 'shop-art-resolve');
+    $shopArt.textContent = originalText;
+    $shopArt._purchaseTimers = [];
+  }, 2280));
 }
 
 function spawnPlopPopup(fx, fy) {
@@ -2153,8 +2240,8 @@ $shopUpgrade.addEventListener('click', () => {
     totalWins -= cost;
     shopLevels[shopIndex] = level + 1;
     writeShopLevels();
-    spawnPurchaseEffect();
     updateScore();
+    spawnPurchaseEffect();
   }
 });
 
