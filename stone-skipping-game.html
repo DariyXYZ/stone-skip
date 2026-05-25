@@ -373,12 +373,12 @@ body[data-theme="day"] #win-ring {
 #sp-stage { color:var(--splash-stage); width:var(--splash-stage-width, 300ch); }
 #sp-stage .spln { display:block; opacity:0; transition:opacity .06s linear; }
 #sp-stage .spln.on { opacity:1; }
-#sp-title { color:var(--splash-title); margin-top:.12em; opacity:0; transition:opacity .9s ease; }
+#sp-title { color:var(--splash-title); margin-top:.12em; opacity:0; transition:opacity .55s ease; }
 #sp-title.on { opacity:1; }
 #sp-prompt {
   font-family:'Courier New',monospace;
   font-size:calc(var(--splash-font-size, 10px) * .72); color:var(--splash-prompt); letter-spacing:4px;
-  opacity:0; transition:opacity .8s; white-space:nowrap;
+  opacity:0; transition:opacity .5s; white-space:nowrap;
   margin-top:.45em; flex-shrink:0;
 }
 #sp-prompt.on { opacity:1; }
@@ -2943,7 +2943,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const spPrompt = document.getElementById('sp-prompt');
   window.StoneSkipSplashCoverSource = SP_ILLUS.replace(/\r/g, '');
   spTitle.textContent = assets.raster.splashTitle;
-  const DELAY    = 22;
+  const DELAY    = 13;
 
   function splashHash(x, y, salt = 0) {
     let n = (x * 374761393 + y * 668265263 + salt * 1442695041) >>> 0;
@@ -3155,12 +3155,12 @@ document.addEventListener('DOMContentLoaded', function() {
   const spTotal = spSpans.length * DELAY;
   let spStarted = false;
   spSpans.forEach((el, i) => setTimeout(() => el.classList.add('on'), i * DELAY));
-  setTimeout(() => spTitle.classList.add('on'), spTotal + 100);
+  setTimeout(() => spTitle.classList.add('on'), spTotal + 60);
   setTimeout(() => {
     spPrompt.classList.add('on');
     document.addEventListener('keydown', spGo, {once:true});
     document.addEventListener('click',   spGo, {once:true});
-  }, spTotal + 900);
+  }, spTotal + 500);
 
   function spGo() {
     if (spStarted) return;
