@@ -2442,14 +2442,10 @@ function renderBand() {
   }
   $band.style.visibility = 'visible';
 
-  const aimDxPx = (stone.spawnX - stone.x) * CW;
-  const aimDyPx = (stone.spawnY - stone.y) * CH;
-  const aimLenPx = Math.max(1, Math.hypot(aimDxPx, aimDyPx));
-  const aimMaxPx = maxPullPixels();
   const x0 = stone.x;
   const y0 = stone.y;
-  const x1 = stone.x + (aimDxPx / aimLenPx) * aimMaxPx / CW;
-  const y1 = stone.y + (aimDyPx / aimLenPx) * aimMaxPx / CH;
+  const x1 = stone.spawnX;
+  const y1 = stone.spawnY;
 
   const cellMap = new Map();
   const mark = (x, y, c) => {
