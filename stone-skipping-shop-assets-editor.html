@@ -228,6 +228,27 @@ iframe { display:none }
 
     <section class="section">
       <div class="title">
+        <h2>Band Line</h2>
+        <span class="hint">dot chars</span>
+      </div>
+      <div class="stack">
+        <div class="field">
+          <label for="band-dots-input">Chars (left = low, right = high)</label>
+          <input id="band-dots-input" maxlength="16" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label>Quick insert</label>
+          <div id="band-char-palette" class="palette"></div>
+        </div>
+        <div class="field">
+          <label>Preview</label>
+          <pre id="band-preview" style="color:#f44;background:#000;padding:6px 10px;border:1px solid var(--line);margin:0;overflow:hidden"></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="title">
         <h2>Smart Brush</h2>
         <span id="brush-state" class="hint">off</span>
       </div>
@@ -516,6 +537,7 @@ function editorFallbackAssets() {
     glyphs: {
       button: { left: '[ ', right: ' ]' },
       currency: 'plops',
+      bandDots: ".·'",
     },
     components: {
       frames: {
@@ -954,6 +976,7 @@ async function loadAssets() {
   selectAssetFromUrl();
   activeIndex = Math.min(activeIndex, assetRefs.length - 1);
   renderEditor();
+  loadBandDots();
   setStatus(
     gameApi || bridgeAssets
       ? 'Loaded from game.'
@@ -1301,6 +1324,58 @@ document.addEventListener('keydown', event => {
     modalEl.setAttribute('aria-hidden', 'true');
   }
 });
+
+// ── Band dots ────────────────────────────────────────────────────────────────
+const bandDotsInputEl = document.getElementById('band-dots-input');
+const bandPreviewEl   = document.getElementById('band-preview');
+const BAND_CHAR_OPTIONS = ['.', ',', '·', '∙', '⋅', '•', "'", '`', '˙', '°', '◦', '○', '∘', '-', '–'];
+
+function buildBandPalette() {
+  const el = document.getElementById('band-char-palette');
+  for (const c of BAND_CHAR_OPTIONS) {
+    const btn = document.createElement('button');
+    btn.textContent = c;
+    btn.title = 'U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
+    btn.style.cssText = 'width:31px;height:31px;padding:0;display:grid;place-items:center';
+    btn.addEventListener('click', () => {
+      bandDotsInputEl.value += c;
+      syncBandDots();
+    });
+    el.appendChild(btn);
+  }
+}
+
+function renderBandPreview(dots) {
+  const chars = [...(dots || '')];
+  if (!chars.length) { bandPreviewEl.textContent = ''; return; }
+  const n = chars.length;
+  const W = 22, H = 5;
+  const rows = Array.from({ length: H }, () => Array(W).fill(' '));
+  for (let cx = 0; cx < W; cx++) {
+    const fy = (cx / (W - 1)) * (H - 1);
+    const cy = Math.round(fy);
+    const frac = fy - cy;                       // −0.5 (high) … +0.5 (low)
+    const idx = Math.round((frac + 0.5) * (n - 1));
+    rows[cy][cx] = chars[Math.max(0, Math.min(n - 1, idx))];
+  }
+  rows[Math.round((H - 1) / 2)][W - 2] = '+'; // anchor
+  bandPreviewEl.textContent = rows.map(r => r.join('')).join('\n');
+}
+
+function syncBandDots() {
+  if (!assets) return;
+  if (!assets.glyphs) assets.glyphs = {};
+  assets.glyphs.bandDots = bandDotsInputEl.value;
+  renderBandPreview(bandDotsInputEl.value);
+}
+
+function loadBandDots() {
+  bandDotsInputEl.value = assets?.glyphs?.bandDots ?? ".·'";
+  renderBandPreview(bandDotsInputEl.value);
+}
+
+bandDotsInputEl.addEventListener('input', syncBandDots);
+buildBandPalette();
 
 buildPalette();
 updateHistoryButtons();
