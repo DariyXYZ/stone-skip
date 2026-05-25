@@ -82,6 +82,12 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 #waves      { color:var(--waves); cursor:default }
 #win-ring   { color:var(--win); pointer-events:none }
 #band       { color:var(--band); pointer-events:none; visibility:hidden }
+#band-anchor {
+  position:fixed; color:var(--band);
+  font-family:'Courier New',monospace; font-size:14px; font-weight:500;
+  line-height:1.18; pointer-events:none; visibility:hidden;
+  text-shadow:.35px 0 currentColor;
+}
 #fish-layer { color:var(--fish); pointer-events:none }
 #fish-hit-layer { color:var(--win); pointer-events:none }
 .plop-popup {
@@ -384,6 +390,7 @@ body[data-theme="day"] #win-ring {
 <pre id="waves"      class="layer"></pre>
 <pre id="win-ring"  class="layer"></pre>
 <pre id="band"      class="layer"></pre>
+<span id="band-anchor"></span>
 <pre id="fish-layer" class="layer"></pre>
 <pre id="fish-hit-layer" class="layer"></pre>
 <span id="stone-el"></span>
@@ -1339,7 +1346,8 @@ let CW, CH, COLS, ROWS, WATER_Y, blankRow, ORIENTATION;
 
 const $waves     = document.getElementById('waves');
 const $winRing   = document.getElementById('win-ring');
-const $band      = document.getElementById('band');
+const $band        = document.getElementById('band');
+const $bandAnchor  = document.getElementById('band-anchor');
 const $stoneEl   = document.getElementById('stone-el');
 const $hint      = document.getElementById('hint');
 const $score     = document.getElementById('score');
@@ -2438,9 +2446,14 @@ function renderStone() {
 function renderBand() {
   if (stone.state !== 'grabbed') {
     $band.style.visibility = 'hidden';
+    $bandAnchor.style.visibility = 'hidden';
     return;
   }
   $band.style.visibility = 'visible';
+  $bandAnchor.textContent = '+';
+  $bandAnchor.style.visibility = 'visible';
+  $bandAnchor.style.left = (stone.spawnX * CW) + 'px';
+  $bandAnchor.style.top  = (stone.spawnY * CH) + 'px';
 
   const x0 = stone.x;
   const y0 = stone.y;
@@ -2492,7 +2505,6 @@ function renderBand() {
     const by = Number(key.slice(comma + 1));
     mark(bx, by, String.fromCharCode(0x2800 + mask));
   }
-  mark(Math.round(stone.spawnX), Math.round(stone.spawnY), '+');
 
   if (stone.typeIndex === 1) {
     const readLevel = upgradeLevel(1);
