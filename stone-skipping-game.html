@@ -2450,15 +2450,13 @@ function renderBand() {
     return;
   }
   $band.style.visibility = 'visible';
-  $bandAnchor.textContent = '+';
-  $bandAnchor.style.visibility = 'visible';
-  $bandAnchor.style.left = (stone.spawnX * CW) + 'px';
-  $bandAnchor.style.top  = (stone.spawnY * CH) + 'px';
+  $bandAnchor.style.visibility = 'hidden';
 
-  const x0 = stone.x;
-  const y0 = stone.y;
-  const x1 = stone.spawnX;
-  const y1 = stone.spawnY;
+  const cx0 = Math.round(stone.x);
+  const cy0 = Math.round(stone.y);
+  const cx1 = Math.round(stone.spawnX);
+  const cy1 = Math.round(stone.spawnY);
+  const odx = cx1 - cx0, ody = cy1 - cy0;
 
   const cellMap = new Map();
   const mark = (x, y, c) => {
@@ -2466,44 +2464,27 @@ function renderBand() {
     if (!cellMap.has(y)) cellMap.set(y, new Map());
     cellMap.get(y).set(x, c);
   };
-  const brailleMasks = new Map();
-  const brailleBit = (sx, sy) => {
-    if (sx === 0 && sy === 0) return 1;
-    if (sx === 0 && sy === 1) return 2;
-    if (sx === 0 && sy === 2) return 4;
-    if (sx === 1 && sy === 0) return 8;
-    if (sx === 1 && sy === 1) return 16;
-    if (sx === 1 && sy === 2) return 32;
-    if (sx === 0 && sy === 3) return 64;
-    return 128;
-  };
-  const markBraille = (x, y, sx, sy) => {
-    if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return;
-    const key = `${x},${y}`;
-    brailleMasks.set(key, (brailleMasks.get(key) || 0) | brailleBit(sx, sy));
-  };
 
-  const dx = x1 - x0, dy = y1 - y0;
-  const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-  const steps = Math.max(1, Math.ceil(dist * 3.4));
-  let lastSubX = -999;
-  let lastSubY = -999;
-  for (let i = 1; i < steps; i++) {
-    const t = i / steps;
-    const px = x0 + dx * t;
-    const py = y0 + dy * t;
-    const subX = Math.round(px * 2);
-    const subY = Math.round(py * 4);
-    if (Math.hypot(subX - lastSubX, subY - lastSubY) < 2.2) continue;
-    markBraille(Math.floor(subX / 2), Math.floor(subY / 4), ((subX % 2) + 2) % 2, ((subY % 4) + 4) % 4);
-    lastSubX = subX;
-    lastSubY = subY;
-  }
-  for (const [key, mask] of brailleMasks) {
-    const comma = key.indexOf(',');
-    const bx = Number(key.slice(0, comma));
-    const by = Number(key.slice(comma + 1));
-    mark(bx, by, String.fromCharCode(0x2800 + mask));
+  // Sub-pixel dot: walk dominant axis, pick char by vertical fraction in cell
+  const DOT = [',', '.', '·', ''', "'"];   // low → high, ~5 vertical positions
+  const pickDot = frac => DOT[Math.round((frac + 0.5) * (DOT.length - 1))];
+
+  const sx = odx >= 0 ? 1 : -1, sy = ody >= 0 ? 1 : -1;
+  if (odx === 0 && ody === 0) {
+    // no drag — nothing
+  } else if (Math.abs(odx) >= Math.abs(ody)) {
+    for (let cx = cx0; cx !== cx1 + sx; cx += sx) {
+      const fy  = cy0 + ody * (cx - cx0) / odx;
+      const cy  = Math.round(fy);
+      const frac = fy - cy;                  // −0.5 … +0.5  (−=high, +=low)
+      mark(cx, cy, cx === cx1 ? '+' : pickDot(frac));
+    }
+  } else {
+    for (let cy = cy0; cy !== cy1 + sy; cy += sy) {
+      const fx  = cx0 + odx * (cy - cy0) / ody;
+      const cx  = Math.round(fx);
+      mark(cx, cy, cy === cy1 ? '+' : '·');
+    }
   }
 
   if (stone.typeIndex === 1) {
@@ -2515,8 +2496,8 @@ function renderBand() {
       const label = spread
         ? `${Math.max(1, predicted - spread)}-${predicted + spread}`
         : `${predicted}`;
-      const tx = Math.max(0, Math.min(COLS - label.length, Math.round(x1) + 2));
-      const ty = Math.max(0, Math.min(ROWS - 1, Math.round(y1) - 1));
+      const tx = Math.max(0, Math.min(COLS - label.length, cx1 + 2));
+      const ty = Math.max(0, Math.min(ROWS - 1, cy1 - 1));
       for (let i = 0; i < label.length; i++) mark(tx + i, ty, label[i]);
     }
   }
