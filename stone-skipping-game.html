@@ -2466,7 +2466,7 @@ function renderBand() {
   };
 
   // Sub-pixel dot: walk dominant axis, pick char by vertical fraction in cell
-  const DOT = [',', '.', '·', ''', "'"];   // low → high, ~5 vertical positions
+  const DOT = ['.', '·', "'"];   // low → high: period, middle-dot, apostrophe
   const pickDot = frac => DOT[Math.round((frac + 0.5) * (DOT.length - 1))];
 
   const sx = odx >= 0 ? 1 : -1, sy = ody >= 0 ? 1 : -1;
