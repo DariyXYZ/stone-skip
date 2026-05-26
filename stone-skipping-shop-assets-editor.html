@@ -111,6 +111,30 @@ h1, h2 { margin:0; font-size:14px; font-weight:700; letter-spacing:0 }
   border:1px solid var(--line);
   background:#050505;
 }
+.sound-grid {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:6px;
+}
+.sound-grid button {
+  min-height:42px;
+  display:grid;
+  align-content:center;
+  text-align:left;
+}
+.sound-grid small {
+  display:block;
+  color:var(--muted);
+  font-size:11px;
+}
+.sound-controls {
+  display:grid;
+  gap:8px;
+}
+.sound-controls input[type="range"] {
+  width:100%;
+  accent-color:#f1f1f1;
+}
 .canvas-head {
   display:flex;
   align-items:center;
@@ -192,7 +216,7 @@ iframe { display:none }
 </style>
 </head>
 <body>
-<iframe id="game-frame" src="stone-skipping-game.html?asset-editor=1&v=asset-editor-v3" title="Stone Skipping Game asset source"></iframe>
+<iframe id="game-frame" src="stone-skipping-game.html?asset-editor=1" title="Stone Skipping Game asset source"></iframe>
 
 <main class="app">
   <aside class="rail">
@@ -203,10 +227,11 @@ iframe { display:none }
       </div>
       <div class="stack">
         <button id="load-assets">Reload from game</button>
-        <button id="save-assets">Save to game localStorage</button>
+        <button id="save-assets">Save browser draft</button>
         <button id="save-open-game">Save and open game</button>
         <button id="reset-assets">Reset saved edits</button>
         <div id="status" class="status">Loading asset pack...</div>
+        <div class="hint">After saving: tell Codex “bake assets”. Codex will update the repo asset JSON and embedded game assets.</div>
       </div>
     </section>
 
@@ -228,22 +253,41 @@ iframe { display:none }
 
     <section class="section">
       <div class="title">
-        <h2>Band Line</h2>
-        <span class="hint">dot chars</span>
+        <h2>Sound Palette</h2>
+        <span class="hint">click to preview</span>
       </div>
       <div class="stack">
         <div class="field">
-          <label for="band-dots-input">Chars (left = low, right = high)</label>
-          <input id="band-dots-input" maxlength="16" autocomplete="off" spellcheck="false">
+          <label>Stone bounce tones</label>
+          <div id="bounce-sound-palette" class="sound-grid"></div>
         </div>
         <div class="field">
-          <label>Quick insert</label>
-          <div id="band-char-palette" class="palette"></div>
+          <label>Upgrade magic tones</label>
+          <div id="upgrade-sound-palette" class="sound-grid"></div>
         </div>
-        <div class="field">
-          <label>Preview</label>
-          <pre id="band-preview" style="color:#f44;background:#000;padding:6px 10px;border:1px solid var(--line);margin:0;overflow:hidden"></pre>
+        <div class="sound-controls">
+          <div class="field">
+            <label for="sound-transpose">Transpose <span id="sound-transpose-value" class="hint">0</span></label>
+            <input id="sound-transpose" type="range" min="-12" max="12" step="1" value="0">
+          </div>
+          <div class="field">
+            <label for="sound-length">Length <span id="sound-length-value" class="hint">1.0</span></label>
+            <input id="sound-length" type="range" min="0.5" max="1.8" step="0.1" value="1">
+          </div>
+          <div class="field">
+            <label for="sound-sparkle">Sparkle <span id="sound-sparkle-value" class="hint">1.0</span></label>
+            <input id="sound-sparkle" type="range" min="0" max="2" step="0.1" value="1">
+          </div>
+          <div class="field">
+            <label for="sound-volume">Volume <span id="sound-volume-value" class="hint">0.8</span></label>
+            <input id="sound-volume" type="range" min="0.1" max="1" step="0.1" value="0.8">
+          </div>
         </div>
+        <div class="row">
+          <button id="preview-custom-bounce">Preview bounce</button>
+          <button id="preview-custom-upgrade">Preview upgrade</button>
+        </div>
+        <div id="sound-status" class="status">Choose a sound, then tell Codex where it should go.</div>
       </div>
     </section>
 
@@ -355,13 +399,21 @@ const undoEl = document.getElementById('undo-edit');
 const redoEl = document.getElementById('redo-edit');
 const resetCurrentEl = document.getElementById('reset-current');
 const downloadPatchEl = document.getElementById('download-patch');
+const soundStatusEl = document.getElementById('sound-status');
+const soundTransposeEl = document.getElementById('sound-transpose');
+const soundLengthEl = document.getElementById('sound-length');
+const soundSparkleEl = document.getElementById('sound-sparkle');
+const soundVolumeEl = document.getElementById('sound-volume');
 const ASSET_STORAGE_KEY = 'stone-skipping-game-asset-patch-v1';
+const ASSET_STORAGE_BACKUP_KEY = 'stone-skipping-game-asset-patch-backup-v1';
 const SPLASH_COVER_VERSION = 5;
+const SPLASH_TITLE_VERSION = 1;
 const SHOP_FRAME_VERSION = 2;
 const SHOP_FRAME_DEFAULT_COLS = 90;
 const SHOP_FRAME_DEFAULT_ROWS = 36;
 const SHOP_FRAME_LEGACY_COLS = 56;
 const SHOP_FRAME_LEGACY_ROWS = 28;
+gameFrame.src = `stone-skipping-game.html?asset-editor=1&asset-editor-v=${Date.now()}`;
 const FALLBACK_SHOP_FRAME_RASTER = String.raw`
 
 
@@ -422,6 +474,8 @@ let beforeBrushValue = '';
 let gameBridgeState = null;
 let gameBridgeSeq = 0;
 const gameBridgePending = new Map();
+const STONE_SKIP_ASSET_CHANNEL = 'stone-skip-assets-v1';
+const editorAssetSourceId = `editor-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 function clone(value) {
   return typeof structuredClone === 'function'
@@ -475,6 +529,40 @@ async function gameAssetsFromBridge(action = 'get', patch = null) {
   return response?.assets ? clone(response.assets) : null;
 }
 
+function requestLiveGameAssets(action = 'get', patch = null, timeout = 700) {
+  if (typeof BroadcastChannel === 'undefined') return Promise.resolve(null);
+  return new Promise(resolve => {
+    const id = `asset-live-${Date.now()}-${++gameBridgeSeq}`;
+    const responses = [];
+    let channel = null;
+    const finish = () => {
+      try { channel?.close(); } catch {}
+      const live = responses.find(response => !response.isAssetEditorFrame);
+      const chosen = live || responses[0] || null;
+      resolve(chosen?.assets ? clone(chosen.assets) : null);
+    };
+    try {
+      channel = new BroadcastChannel(STONE_SKIP_ASSET_CHANNEL);
+      channel.addEventListener('message', event => {
+        const message = event.data;
+        if (!message || message.type !== 'stone-skip-assets-response' || message.id !== id) return;
+        if (message.sourceId === editorAssetSourceId) return;
+        responses.push(message);
+      });
+      channel.postMessage({
+        type: 'stone-skip-assets-request',
+        id,
+        sourceId: editorAssetSourceId,
+        action,
+        patch,
+      });
+      setTimeout(finish, timeout);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
 function readStoredAssetPatch() {
   try {
     const raw = localStorage.getItem(ASSET_STORAGE_KEY);
@@ -491,6 +579,79 @@ function writeStoredAssetPatch(patch) {
   } catch {
     return false;
   }
+}
+
+function backupStoredAssetPatch() {
+  try {
+    const raw = localStorage.getItem(ASSET_STORAGE_KEY);
+    if (raw) localStorage.setItem(ASSET_STORAGE_BACKUP_KEY, raw);
+  } catch {}
+}
+
+const MOJIBAKE_REPAIR_CHARS = '·˙╭╮╰╯─│✔✓→≈—–…™★☆■□▲△◆◇●○◯⬤•“”‘’°◦‹›⋅∗';
+let mojibakeReplacements = null;
+
+function buildMojibakeReplacements() {
+  if (mojibakeReplacements) return mojibakeReplacements;
+  const enc = new TextEncoder();
+  const decoders = ['windows-1251', 'windows-1252']
+    .map(label => {
+      try { return new TextDecoder(label); } catch { return null; }
+    })
+    .filter(Boolean);
+  const map = new Map();
+  for (const ch of MOJIBAKE_REPAIR_CHARS) {
+    let frontier = [ch];
+    for (let depth = 0; depth < 3; depth++) {
+      const next = [];
+      for (const value of frontier) {
+        for (const decoder of decoders) {
+          const bad = decoder.decode(enc.encode(value));
+          if (bad === ch || !/[^\x00-\x7F]/.test(bad)) continue;
+          if (!map.has(bad)) map.set(bad, ch);
+          next.push(bad);
+        }
+      }
+      frontier = next;
+    }
+  }
+  mojibakeReplacements = [...map.entries()].sort((a, b) => b[0].length - a[0].length);
+  return mojibakeReplacements;
+}
+
+function repairMojibakeText(text) {
+  let out = text;
+  for (const [bad, good] of buildMojibakeReplacements()) out = out.split(bad).join(good);
+  return out;
+}
+
+function repairMojibakeValue(value) {
+  if (typeof value === 'string') return repairMojibakeText(value);
+  if (Array.isArray(value)) return value.map(repairMojibakeValue);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [key, item] of Object.entries(value)) out[key] = repairMojibakeValue(item);
+    return out;
+  }
+  return value;
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function currentGameAssets(timeout = 2600) {
+  const liveAssets = await requestLiveGameAssets();
+  if (liveAssets) return liveAssets;
+  const started = performance.now();
+  while (performance.now() - started < timeout) {
+    const gameApi = api();
+    if (gameApi) return clone(gameApi.get());
+    const bridgeAssets = await gameAssetsFromBridge('get', null);
+    if (bridgeAssets) return bridgeAssets;
+    await wait(120);
+  }
+  return null;
 }
 
 function deepMergeAsset(base, patch) {
@@ -532,6 +693,7 @@ function editorFallbackAssets() {
       version: 5,
       name: 'Stone Skipping editor fallback',
       splashCoverVersion: SPLASH_COVER_VERSION,
+      splashTitleVersion: SPLASH_TITLE_VERSION,
       shopFrameVersion: SHOP_FRAME_VERSION,
     },
     glyphs: {
@@ -567,7 +729,7 @@ function editorFallbackAssets() {
       ],
     },
   };
-  return deepMergeAsset(base, stored);
+  return repairMojibakeValue(deepMergeAsset(base, stored));
 }
 
 function setStatus(text, isError = false) {
@@ -641,10 +803,11 @@ function isGeneratedShopFrameRaster(raster, cols, rows) {
 
 function upgradeStoredAssetPatch(patch) {
   if (!patch || typeof patch !== 'object') return patch;
-  const upgraded = clone(patch);
+  const upgraded = repairMojibakeValue(clone(patch));
   upgraded.meta = deepMergeAsset(clone(upgraded.meta || {}), {
     version: 3,
     splashCoverVersion: SPLASH_COVER_VERSION,
+    splashTitleVersion: SPLASH_TITLE_VERSION,
     shopFrameVersion: SHOP_FRAME_VERSION,
   });
 
@@ -662,6 +825,14 @@ function upgradeStoredAssetPatch(patch) {
   ) {
     delete frames.shopRaster;
     upgraded.meta.shopFrameVersion = SHOP_FRAME_VERSION;
+    writeStoredAssetPatch(upgraded);
+  }
+  const hasSplashTitle = upgraded.raster
+    && Object.prototype.hasOwnProperty.call(upgraded.raster, 'splashTitle');
+  const storedSplashTitleVersion = Number(patch.meta?.splashTitleVersion) || 0;
+  if (hasSplashTitle && storedSplashTitleVersion < SPLASH_TITLE_VERSION) {
+    delete upgraded.raster.splashTitle;
+    upgraded.meta.splashTitleVersion = SPLASH_TITLE_VERSION;
     writeStoredAssetPatch(upgraded);
   }
   return upgraded;
@@ -846,14 +1017,14 @@ function currentRef() {
 function syncFromUi() {
   if (!assets || !currentRef()) return;
   const ref = currentRef();
-  ref.set(canvasEl.value);
+  ref.set(repairMojibakeText(canvasEl.value));
   if (ref.type === 'shop-item') {
     const item = assets.entities.shopStones[ref.index];
-    item.name = nameEl.value;
+    item.name = repairMojibakeText(nameEl.value);
     const costVal = Number(costEl.value) || 0;
     if (Array.isArray(item.costs)) item.costs[0] = costVal;
     else item.cost = costVal;
-    item.desc = descEl.value;
+    item.desc = repairMojibakeText(descEl.value);
   }
 }
 
@@ -884,7 +1055,7 @@ function renderEditor() {
   resetHistory();
   const ref = currentRef();
   document.getElementById('asset-title').textContent = ref.label;
-  canvasEl.value = ref.get();
+  canvasEl.value = repairMojibakeText(ref.get());
   itemMetaEl.classList.toggle('hidden', ref.type !== 'shop-item');
   if (ref.type === 'shop-item') {
     const item = assets.entities.shopStones[ref.index];
@@ -912,6 +1083,7 @@ function makePatch() {
       version: assets.meta?.version || 5,
       name: assets.meta?.name || 'stone-skipping-game-core',
       splashCoverVersion: SPLASH_COVER_VERSION,
+      splashTitleVersion: assets.meta?.splashTitleVersion || SPLASH_TITLE_VERSION,
       shopFrameVersion: assets.meta?.shopFrameVersion || SHOP_FRAME_VERSION,
     },
     raster: {
@@ -969,16 +1141,14 @@ function renderPreview() {
 }
 
 async function loadAssets() {
-  const gameApi = api();
-  const bridgeAssets = gameApi ? null : await gameAssetsFromBridge();
-  assets = gameApi ? gameApi.get() : (bridgeAssets || editorFallbackAssets());
+  const gameAssets = await currentGameAssets();
+  assets = repairMojibakeValue(gameAssets || editorFallbackAssets());
   buildRefs();
   selectAssetFromUrl();
   activeIndex = Math.min(activeIndex, assetRefs.length - 1);
   renderEditor();
-  loadBandDots();
   setStatus(
-    gameApi || bridgeAssets
+    gameAssets
       ? 'Loaded from game.'
       : 'Loaded local fallback. Game asset bridge is not available.'
   );
@@ -989,12 +1159,19 @@ async function saveAssets() {
   const gameApi = api();
   const patch = makePatch();
   let savedThroughGame = !!gameApi;
-  if (gameApi) {
+  const liveSavedAssets = await requestLiveGameAssets('save', patch);
+  if (liveSavedAssets) {
+    assets = repairMojibakeValue(liveSavedAssets);
+    buildRefs();
+    savedThroughGame = true;
+  } else if (gameApi) {
     gameApi.save(patch);
+    assets = repairMojibakeValue(clone(gameApi.get()));
+    buildRefs();
   } else {
     const bridgeAssets = await gameAssetsFromBridge('save', patch);
     if (bridgeAssets) {
-      assets = bridgeAssets;
+      assets = repairMojibakeValue(bridgeAssets);
       buildRefs();
       savedThroughGame = true;
     } else if (!writeStoredAssetPatch(patch)) {
@@ -1002,9 +1179,10 @@ async function saveAssets() {
       return false;
     }
   }
+  renderEditor();
   const cover = assets.raster?.splashCover || '';
   const size = cover ? ` Splash cover: ${rasterWidth(cover)} cols x ${cover.split('\n').length} rows.` : '';
-  setStatus(`${savedThroughGame ? 'Saved to game.' : 'Saved to local fallback.'}${size}`);
+  setStatus(`${savedThroughGame ? 'Browser draft saved.' : 'Local browser draft saved.'}${size} Next: tell Codex "bake assets".`);
   return true;
 }
 
@@ -1017,6 +1195,9 @@ async function saveAndOpenGame() {
 }
 
 async function resetAssets() {
+  const ok = confirm('Reset saved asset edits? A backup will be kept for this browser.');
+  if (!ok) return;
+  backupStoredAssetPatch();
   const gameApi = api();
   if (gameApi) {
     gameApi.reset();
@@ -1026,7 +1207,7 @@ async function resetAssets() {
     try { localStorage.removeItem(ASSET_STORAGE_KEY); } catch {}
   }
   await loadAssets();
-  setStatus('Saved edits reset.');
+  setStatus('Saved edits reset. Previous patch was backed up.');
 }
 
 function resetCurrentAsset() {
@@ -1195,7 +1376,14 @@ function brushEnergy(from, to, event) {
 }
 
 function buildPalette() {
-  const symbols = [' ', '.', ',', ':', ';', '+', '*', '?', '%', 'S', '#', '@', '~', '/', '\\', '-', '|', '_', '·', '˙', '╭', '╮', '╰', '╯', '─', '│', '╴', '╶', '╵', '╷', '[', ']', '<', '>'];
+  const symbols = [
+    ' ', '.', ',', ':', ';', '+', '*', '?', '%', 'S', '#', '@',
+    '~', '/', '\\', '-', '|', '_', '[', ']', '<', '>', '(', ')',
+    '·', '˙', '°', '◦', '•', '⋅', '○', '●', '◯', 'o', 'O',
+    '✦', '✧', '✶', '✷', '✸', '✹', '✺', '✻', '✽', '✱', '✳', '★', '☆',
+    '╭', '╮', '╰', '╯', '─', '│', '╴', '╶', '╵', '╷',
+    '△', '▲', '◇', '◆', '□', '■', '≈', '∿',
+  ];
   for (const symbol of symbols) {
     const btn = document.createElement('button');
     btn.dataset.symbol = symbol;
@@ -1326,58 +1514,186 @@ document.addEventListener('keydown', event => {
 });
 
 // ── Band dots ────────────────────────────────────────────────────────────────
-const bandDotsInputEl = document.getElementById('band-dots-input');
-const bandPreviewEl   = document.getElementById('band-preview');
-const BAND_CHAR_OPTIONS = ['.', ',', '·', '∙', '⋅', '•', "'", '`', '˙', '°', '◦', '○', '∘', '-', '–'];
+// -- Sound palette -----------------------------------------------------------
+let soundAudio = null;
+const SOUND_PITCHES = [440, 554, 622, 740, 831, 880, 1047, 880, 740, 622];
+const BOUNCE_SOUND_PRESETS = [
+  { id:'big-round', label:'big round', note:'low clean', transpose:-7 },
+  { id:'small-round', label:'small round', note:'neutral', transpose:0 },
+  { id:'block', label:'block', note:'low short', transpose:-3 },
+  { id:'star', label:'star', note:'high', transpose:7 },
+  { id:'triangle', label:'triangle', note:'bright', transpose:4 },
+  { id:'diamond', label:'diamond', note:'glass', transpose:2 },
+];
+const UPGRADE_SOUND_PRESETS = [
+  { id:'void-shimmer', label:'void shimmer', note:'strange soft', transpose:0, length:1.0, sparkle:0.8 },
+  { id:'neon-orbit', label:'neon orbit', note:'wide alien', transpose:5, length:1.0, sparkle:1.5 },
+  { id:'deep-portal', label:'deep portal', note:'lower cosmic', transpose:-5, length:1.15, sparkle:0.9 },
+  { id:'quick-constellation', label:'quick stars', note:'short alien', transpose:2, length:0.7, sparkle:1.2 },
+  { id:'slow-stardust', label:'slow dust', note:'long shimmer', transpose:0, length:1.55, sparkle:1.1 },
+  { id:'cold-signal', label:'cold signal', note:'thin strange', transpose:7, length:0.9, sparkle:0.4 },
+];
 
-function buildBandPalette() {
-  const el = document.getElementById('band-char-palette');
-  for (const c of BAND_CHAR_OPTIONS) {
+function initSoundAudio() {
+  if (soundAudio) return soundAudio;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const dry = ctx.createGain();
+  dry.gain.value = 0.55;
+  dry.connect(ctx.destination);
+  const wet = ctx.createGain();
+  wet.gain.value = 0.45;
+  wet.connect(ctx.destination);
+  soundAudio = { ctx, dry, wet };
+  return soundAudio;
+}
+
+function soundSemitone(freq, semi = 0) {
+  return freq * Math.pow(2, semi / 12);
+}
+
+function soundControls() {
+  return {
+    transpose:Number(soundTransposeEl.value) || 0,
+    length:Number(soundLengthEl.value) || 1,
+    sparkle:Number(soundSparkleEl.value) || 1,
+    volume:Number(soundVolumeEl.value) || 0.8,
+  };
+}
+
+function setSoundStatus(text) {
+  if (soundStatusEl) soundStatusEl.textContent = text;
+}
+
+function playEditorBounce(preset = {}) {
+  const { ctx, dry, wet } = initSoundAudio();
+  ctx.resume();
+  const controls = soundControls();
+  const transpose = (preset.transpose || 0) + controls.transpose;
+  const now = ctx.currentTime;
+  const strength = 0.82 * controls.volume;
+  const freq = soundSemitone(SOUND_PITCHES[2], transpose);
+
+  const osc = ctx.createOscillator();
+  const env = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(0.20 * strength, now + 0.003);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+  osc.connect(env); env.connect(dry); env.connect(wet);
+  osc.start(now); osc.stop(now + 0.7);
+
+  const thud = ctx.createOscillator();
+  const tEnv = ctx.createGain();
+  thud.type = 'sine';
+  thud.frequency.setValueAtTime(110 * strength, now);
+  thud.frequency.exponentialRampToValueAtTime(38, now + 0.09);
+  tEnv.gain.setValueAtTime(0.30 * strength, now);
+  tEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+  thud.connect(tEnv); tEnv.connect(dry);
+  thud.start(now); thud.stop(now + 0.12);
+  setSoundStatus(`bounce: ${preset.id || 'custom'} / transpose ${transpose}`);
+}
+
+function playEditorUpgrade(preset = {}) {
+  const { ctx, dry, wet } = initSoundAudio();
+  ctx.resume();
+  const controls = soundControls();
+  const transpose = (preset.transpose || 0) + controls.transpose;
+  const length = (preset.length || 1) * controls.length;
+  const sparkleAmt = Math.max(0, (preset.sparkle ?? 1) * controls.sparkle);
+  const volume = controls.volume;
+  const now = ctx.currentTime;
+  const chargeEnd = now + 1.72 * length;
+  const finish = now + 2.35 * length;
+  const root = soundSemitone(392, transpose);
+  const scale = [0, 1, 6, 10, 13, 18, 23, 25, 30];
+
+  function ping(t, semi, gain, tail = 0.18) {
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = soundSemitone(root, semi);
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(gain * volume, t + 0.006);
+    env.gain.exponentialRampToValueAtTime(0.001, t + tail);
+    osc.connect(env); env.connect(dry); env.connect(wet);
+    osc.start(t); osc.stop(t + tail + 0.04);
+  }
+
+  const count = Math.round(10 + sparkleAmt * 14);
+  for (let i = 0; i < count; i++) {
+    const p = count <= 1 ? 1 : i / (count - 1);
+    const tt = now + Math.pow(p, 0.72) * 1.62 * length + Math.random() * 0.035;
+    const semi = scale[(i * 2 + Math.floor(p * 5)) % scale.length] + (p > 0.68 ? 12 : 0);
+    ping(tt, semi, 0.014 + p * (0.033 + sparkleAmt * 0.010), (0.10 + p * 0.13) * length);
+  }
+
+  if (sparkleAmt > 0) {
+    const shimmerLen = Math.max(1, Math.floor(ctx.sampleRate * 2.15 * length));
+    const shimmer = ctx.createBuffer(1, shimmerLen, ctx.sampleRate);
+    const sd = shimmer.getChannelData(0);
+    for (let i = 0; i < shimmerLen; i++) {
+      const p = i / shimmerLen;
+      sd[i] = (Math.random() * 2 - 1) * Math.pow(p, 1.8) * Math.pow(1 - p * 0.25, 1.5);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = shimmer;
+    const flt = ctx.createBiquadFilter();
+    flt.type = 'bandpass';
+    flt.frequency.setValueAtTime(1900, now);
+    flt.frequency.linearRampToValueAtTime(7400, chargeEnd);
+    flt.frequency.linearRampToValueAtTime(3200, finish);
+    flt.Q.value = 18;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, now);
+    env.gain.linearRampToValueAtTime(0.010 * sparkleAmt * volume, now + 0.28 * length);
+    env.gain.linearRampToValueAtTime(0.050 * sparkleAmt * volume, chargeEnd);
+    env.gain.exponentialRampToValueAtTime(0.001, finish);
+    src.connect(flt); flt.connect(env); env.connect(wet);
+    src.start(now); src.stop(finish);
+  }
+
+  [0, 1, 6, 10, 13, 18, 23, 25, 30].forEach((semi, i) => {
+    ping(chargeEnd + i * 0.024 * length, semi, 0.055 + sparkleAmt * 0.010, (0.22 + i * 0.018) * length);
+  });
+  setSoundStatus(`upgrade: ${preset.id || 'custom'} / transpose ${transpose}, length ${length.toFixed(2)}, sparkle ${sparkleAmt.toFixed(1)}`);
+}
+
+function updateSoundReadouts() {
+  document.getElementById('sound-transpose-value').textContent = soundTransposeEl.value;
+  document.getElementById('sound-length-value').textContent = Number(soundLengthEl.value).toFixed(1);
+  document.getElementById('sound-sparkle-value').textContent = Number(soundSparkleEl.value).toFixed(1);
+  document.getElementById('sound-volume-value').textContent = Number(soundVolumeEl.value).toFixed(1);
+}
+
+function buildSoundPalette() {
+  const bounceEl = document.getElementById('bounce-sound-palette');
+  const upgradeEl = document.getElementById('upgrade-sound-palette');
+  BOUNCE_SOUND_PRESETS.forEach(preset => {
     const btn = document.createElement('button');
-    btn.textContent = c;
-    btn.title = 'U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
-    btn.style.cssText = 'width:31px;height:31px;padding:0;display:grid;place-items:center';
-    btn.addEventListener('click', () => {
-      bandDotsInputEl.value += c;
-      syncBandDots();
-    });
-    el.appendChild(btn);
-  }
+    btn.type = 'button';
+    btn.innerHTML = `${preset.label}<small>${preset.note}</small>`;
+    btn.addEventListener('click', () => playEditorBounce(preset));
+    bounceEl.appendChild(btn);
+  });
+  UPGRADE_SOUND_PRESETS.forEach(preset => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.innerHTML = `${preset.label}<small>${preset.note}</small>`;
+    btn.addEventListener('click', () => playEditorUpgrade(preset));
+    upgradeEl.appendChild(btn);
+  });
+  [soundTransposeEl, soundLengthEl, soundSparkleEl, soundVolumeEl].forEach(el => {
+    el.addEventListener('input', updateSoundReadouts);
+  });
+  document.getElementById('preview-custom-bounce').addEventListener('click', () => playEditorBounce({ id:'custom' }));
+  document.getElementById('preview-custom-upgrade').addEventListener('click', () => playEditorUpgrade({ id:'custom' }));
+  updateSoundReadouts();
 }
-
-function renderBandPreview(dots) {
-  const chars = [...(dots || '')];
-  if (!chars.length) { bandPreviewEl.textContent = ''; return; }
-  const n = chars.length;
-  const W = 22, H = 5;
-  const rows = Array.from({ length: H }, () => Array(W).fill(' '));
-  for (let cx = 0; cx < W; cx++) {
-    const fy = (cx / (W - 1)) * (H - 1);
-    const cy = Math.round(fy);
-    const frac = fy - cy;                       // −0.5 (high) … +0.5 (low)
-    const idx = Math.round((frac + 0.5) * (n - 1));
-    rows[cy][cx] = chars[Math.max(0, Math.min(n - 1, idx))];
-  }
-  rows[Math.round((H - 1) / 2)][W - 2] = '+'; // anchor
-  bandPreviewEl.textContent = rows.map(r => r.join('')).join('\n');
-}
-
-function syncBandDots() {
-  if (!assets) return;
-  if (!assets.glyphs) assets.glyphs = {};
-  assets.glyphs.bandDots = bandDotsInputEl.value;
-  renderBandPreview(bandDotsInputEl.value);
-}
-
-function loadBandDots() {
-  bandDotsInputEl.value = assets?.glyphs?.bandDots ?? ".·'";
-  renderBandPreview(bandDotsInputEl.value);
-}
-
-bandDotsInputEl.addEventListener('input', syncBandDots);
-buildBandPalette();
 
 buildPalette();
+buildSoundPalette();
 updateHistoryButtons();
 function waitForGameApiOrFallback() {
   const startedAt = performance.now();
