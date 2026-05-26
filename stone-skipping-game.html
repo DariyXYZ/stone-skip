@@ -101,7 +101,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 }
 #shop-art.shop-art-purchase {
   color: var(--shop-strong);
-  animation: shop-art-charge-shake 2.28s linear both;
+  animation: shop-art-charge-shake 2.92s linear both;
   will-change: transform;
 }
 #shop-art .purchase-cell {
@@ -681,17 +681,17 @@ const ASSET_PACK = {
      .˙            ˙˙.
     ~˙                ˙.
   .˙                    \
- ·:                      +
+ :,                      +
 .*                        :
 :˙                        :
 ::.                      .:
-::.                      ::
-˙::~                    ·:˙
- * :~·                 ·~*
-  \·~~:~.           ·~~~/
-   ˙:~~~·~·-~~~~~-~:~*~~
-     ·:~~~~~+·~~~~·*~·˙
-        ˙·-*~~~~~~*˙`
+:?.                      ::
+˙:S~                    ·:˙
+ *:%~·                 ·~*
+  \·#?:~.           ·~~*/
+   ˙::#?:.·.~.....~:~?:~
+     ·:?%##%:#%:%::?*·˙
+        ˙********~*˙`
       },
       {
         id: "small-round-read",
@@ -1435,10 +1435,10 @@ function playPurchaseMagic(typeIndex, level = 1) {
   const { ctx, dry, reverbSend } = audio;
   const profile = stoneAudioProfile(typeIndex);
   const now = ctx.currentTime;
-  const root = transposed(392, profile.transpose * 0.6);
-  const chargeEnd = now + 1.78;
-  const finish = now + 2.45;
-  const scale = [0, 1, 6, 10, 13, 18, 23, 25, 30];
+  const root = transposed(349, profile.transpose * 0.55);
+  const chargeEnd = now + 2.34;
+  const finish = now + 3.28;
+  const scale = [0, 1, 5, 8, 13, 17, 22, 26, 31, 36];
 
   function sparkle(t, semi, gain, tail = 0.18) {
     const osc = ctx.createOscillator();
@@ -1453,40 +1453,40 @@ function playPurchaseMagic(typeIndex, level = 1) {
   }
 
   // Rising shimmer: short scattered chimes, no sustained vowel-like glide.
-  for (let i = 0; i < 24; i++) {
-    const p = i / 23;
-    const t = now + Math.pow(p, 0.72) * 1.68 + Math.random() * 0.035;
-    const semi = scale[(i * 2 + typeIndex + Math.floor(p * 5)) % scale.length] + (p > 0.68 ? 12 : 0);
-    const gain = 0.014 + p * (0.040 + level * 0.005);
-    sparkle(t, semi, gain, 0.11 + p * 0.12);
+  for (let i = 0; i < 32; i++) {
+    const p = i / 31;
+    const t = now + Math.pow(p, 0.76) * 2.18 + Math.random() * 0.055;
+    const semi = scale[(i * 3 + typeIndex + Math.floor(p * 7)) % scale.length] + (p > 0.72 ? 12 : 0);
+    const gain = 0.010 + p * (0.033 + level * 0.004);
+    sparkle(t, semi, gain, 0.16 + p * 0.20);
   }
 
-  const shimmerLen = ctx.sampleRate * 2.25;
+  const shimmerLen = ctx.sampleRate * 3.08;
   const shimmer = ctx.createBuffer(1, shimmerLen, ctx.sampleRate);
   const sd = shimmer.getChannelData(0);
   for (let i = 0; i < shimmerLen; i++) {
     const p = i / shimmerLen;
-    sd[i] = (Math.random() * 2 - 1) * Math.pow(p, 1.8) * Math.pow(1 - p * 0.25, 1.5);
+    sd[i] = (Math.random() * 2 - 1) * Math.pow(p, 1.55) * Math.pow(1 - p * 0.18, 1.7);
   }
   const src = ctx.createBufferSource();
   src.buffer = shimmer;
   const flt = ctx.createBiquadFilter();
   flt.type = 'bandpass';
-  flt.frequency.setValueAtTime(1900, now);
-  flt.frequency.linearRampToValueAtTime(7400, chargeEnd);
-  flt.frequency.linearRampToValueAtTime(3200, finish);
-  flt.Q.value = 18;
+  flt.frequency.setValueAtTime(1200, now);
+  flt.frequency.linearRampToValueAtTime(6200, chargeEnd);
+  flt.frequency.linearRampToValueAtTime(2400, finish);
+  flt.Q.value = 22;
   const noiseEnv = ctx.createGain();
   noiseEnv.gain.setValueAtTime(0, now);
-  noiseEnv.gain.linearRampToValueAtTime(0.012, now + 0.30);
-  noiseEnv.gain.linearRampToValueAtTime(0.058, chargeEnd);
+  noiseEnv.gain.linearRampToValueAtTime(0.009, now + 0.48);
+  noiseEnv.gain.linearRampToValueAtTime(0.046, chargeEnd);
   noiseEnv.gain.exponentialRampToValueAtTime(0.001, finish);
   src.connect(flt); flt.connect(noiseEnv); noiseEnv.connect(reverbSend);
   src.start(now); src.stop(finish);
 
   // Bright sparkle burst timed to the visual spark explosion.
-  [0, 1, 6, 10, 13, 18, 23, 25, 30].forEach((semi, i) => {
-    sparkle(chargeEnd + i * 0.024, semi, 0.062 + level * 0.008, 0.24 + i * 0.018);
+  [0, 1, 5, 8, 13, 17, 22, 26, 31, 36].forEach((semi, i) => {
+    sparkle(chargeEnd + i * 0.038, semi, 0.050 + level * 0.007, 0.32 + i * 0.026);
   });
 }
 
@@ -2249,7 +2249,7 @@ function purchaseChargeDelay(row, col, rows, cols) {
   const wobble = Math.sin(col * 1.7 + row * 0.8) * 120
     + Math.cos(col * 0.53 - row * 1.35) * 95
     + ((row * 37 + col * 19) % 11 - 5) * 18;
-  return Math.max(40, Math.min(1580, 95 + y * 1380 + wobble + Math.sin(x * Math.PI * 2) * 55));
+  return Math.max(60, Math.min(2020, 130 + y * 1760 + wobble * 1.08 + Math.sin(x * Math.PI * 2) * 70));
 }
 
 function buildPurchaseCells(text) {
@@ -2313,12 +2313,12 @@ function spawnPurchaseEffect() {
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
     cells.forEach(cell => cell.classList.add('charge-green'));
-  }, 1560));
+  }, 2000));
 
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
     $shopArt.classList.add('shop-art-glow', 'shop-art-burst');
-  }, 1780));
+  }, 2260));
 
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
@@ -2330,7 +2330,7 @@ function spawnPurchaseEffect() {
       const cr = cell.getBoundingClientRect();
       const tx = ((Math.random() - 0.5) * 44).toFixed(1);
       const ty = (-(52 + Math.random() * 88)).toFixed(1);
-      const dur = (0.38 + Math.random() * 0.26).toFixed(2);
+      const dur = (0.52 + Math.random() * 0.34).toFixed(2);
       spawnPurchaseSpark(
         cr.left + cr.width * 0.5,
         cr.top + cr.height * 0.45,
@@ -2340,18 +2340,18 @@ function spawnPurchaseEffect() {
         sparkChars[(i + Math.floor(Math.random() * sparkChars.length)) % sparkChars.length]
       );
     }
-  }, 1810));
+  }, 2300));
 
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
     $shopArt.classList.add('shop-art-resolve');
-  }, 1980));
+  }, 2550));
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
     $shopArt.classList.remove('shop-art-purchase', 'shop-art-glow', 'shop-art-burst', 'shop-art-resolve');
     $shopArt.textContent = originalText;
     $shopArt._purchaseTimers = [];
-  }, 2280));
+  }, 2920));
 }
 
 function spawnPlopPopup(fx, fy) {

@@ -1604,10 +1604,10 @@ function playEditorUpgrade(preset = {}) {
   const sparkleAmt = Math.max(0, (preset.sparkle ?? 1) * controls.sparkle);
   const volume = controls.volume;
   const now = ctx.currentTime;
-  const chargeEnd = now + 1.72 * length;
-  const finish = now + 2.35 * length;
-  const root = soundSemitone(392, transpose);
-  const scale = [0, 1, 6, 10, 13, 18, 23, 25, 30];
+  const chargeEnd = now + 2.34 * length;
+  const finish = now + 3.28 * length;
+  const root = soundSemitone(349, transpose);
+  const scale = [0, 1, 5, 8, 13, 17, 22, 26, 31, 36];
 
   function ping(t, semi, gain, tail = 0.18) {
     const osc = ctx.createOscillator();
@@ -1621,41 +1621,41 @@ function playEditorUpgrade(preset = {}) {
     osc.start(t); osc.stop(t + tail + 0.04);
   }
 
-  const count = Math.round(10 + sparkleAmt * 14);
+  const count = Math.round(14 + sparkleAmt * 18);
   for (let i = 0; i < count; i++) {
     const p = count <= 1 ? 1 : i / (count - 1);
-    const tt = now + Math.pow(p, 0.72) * 1.62 * length + Math.random() * 0.035;
-    const semi = scale[(i * 2 + Math.floor(p * 5)) % scale.length] + (p > 0.68 ? 12 : 0);
-    ping(tt, semi, 0.014 + p * (0.033 + sparkleAmt * 0.010), (0.10 + p * 0.13) * length);
+    const tt = now + Math.pow(p, 0.76) * 2.18 * length + Math.random() * 0.055;
+    const semi = scale[(i * 3 + Math.floor(p * 7)) % scale.length] + (p > 0.72 ? 12 : 0);
+    ping(tt, semi, 0.010 + p * (0.028 + sparkleAmt * 0.008), (0.16 + p * 0.20) * length);
   }
 
   if (sparkleAmt > 0) {
-    const shimmerLen = Math.max(1, Math.floor(ctx.sampleRate * 2.15 * length));
+    const shimmerLen = Math.max(1, Math.floor(ctx.sampleRate * 3.08 * length));
     const shimmer = ctx.createBuffer(1, shimmerLen, ctx.sampleRate);
     const sd = shimmer.getChannelData(0);
     for (let i = 0; i < shimmerLen; i++) {
       const p = i / shimmerLen;
-      sd[i] = (Math.random() * 2 - 1) * Math.pow(p, 1.8) * Math.pow(1 - p * 0.25, 1.5);
+      sd[i] = (Math.random() * 2 - 1) * Math.pow(p, 1.55) * Math.pow(1 - p * 0.18, 1.7);
     }
     const src = ctx.createBufferSource();
     src.buffer = shimmer;
     const flt = ctx.createBiquadFilter();
     flt.type = 'bandpass';
-    flt.frequency.setValueAtTime(1900, now);
-    flt.frequency.linearRampToValueAtTime(7400, chargeEnd);
-    flt.frequency.linearRampToValueAtTime(3200, finish);
-    flt.Q.value = 18;
+    flt.frequency.setValueAtTime(1200, now);
+    flt.frequency.linearRampToValueAtTime(6200, chargeEnd);
+    flt.frequency.linearRampToValueAtTime(2400, finish);
+    flt.Q.value = 22;
     const env = ctx.createGain();
     env.gain.setValueAtTime(0, now);
-    env.gain.linearRampToValueAtTime(0.010 * sparkleAmt * volume, now + 0.28 * length);
-    env.gain.linearRampToValueAtTime(0.050 * sparkleAmt * volume, chargeEnd);
+    env.gain.linearRampToValueAtTime(0.008 * sparkleAmt * volume, now + 0.48 * length);
+    env.gain.linearRampToValueAtTime(0.042 * sparkleAmt * volume, chargeEnd);
     env.gain.exponentialRampToValueAtTime(0.001, finish);
     src.connect(flt); flt.connect(env); env.connect(wet);
     src.start(now); src.stop(finish);
   }
 
-  [0, 1, 6, 10, 13, 18, 23, 25, 30].forEach((semi, i) => {
-    ping(chargeEnd + i * 0.024 * length, semi, 0.055 + sparkleAmt * 0.010, (0.22 + i * 0.018) * length);
+  [0, 1, 5, 8, 13, 17, 22, 26, 31, 36].forEach((semi, i) => {
+    ping(chargeEnd + i * 0.038 * length, semi, 0.046 + sparkleAmt * 0.009, (0.32 + i * 0.026) * length);
   });
   setSoundStatus(`upgrade: ${preset.id || 'custom'} / transpose ${transpose}, length ${length.toFixed(2)}, sparkle ${sparkleAmt.toFixed(1)}`);
 }
