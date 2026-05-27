@@ -1373,19 +1373,16 @@ const UPGRADE_MAGIC_BASE = {
   id: 'water-wind-11',
   root: 165,
   rootScale: 0.18,
-  scale: [0, 2, 7, 10, 12, 14, 19, 22],
+  scale: [0, 3, 7, 10, 12, 15, 19, 22],
   wave: 'triangle',
-  count: 18,
-  charge: 2.00,
-  finish: 2.58,
-  noise: { type: 'lowpass', from: 110, peak: 920, end: 280, q: 18, gain: 0.134 },
-  burst: { gain: 0.026, gap: 0.020, tail: 0.20, preRoll: 0.00 },
-  reverse: { at: -1.94, tail: 1.54, gain: 0.182, from: 90, to: 1320 },
-  choir: { semis: [0, 7, 10, 14], gain: 0.014, attack: 0.16, release: 0.18, endAt: -0.54 },
-  sweep: [
-    { at: -1.88, from: -12, to: 7, gain: 0.012, tail: 1.02 },
-    { at: -0.94, from: -5, to: 10, gain: 0.016, tail: 0.38 },
-  ],
+  count: 4,
+  charge: 2.41,
+  finish: 3.17,
+  noise: { type: 'lowpass', from: 110, peak: 600, end: 200, q: 10, gain: 0.10 },
+  burst: { gain: 0.130, gap: 0.018, tail: 0.22, preRoll: 0.00 },
+  reverse: { at: -2.60, tail: 2.14, gain: 1.00, from: 80, to: 3200 },
+  choir: { semis: [0, 7, 10], gain: 0.016, attack: 0.22, release: 0.18, endAt: -0.65 },
+  sweep: [],
   subBoom: false,
 };
 
@@ -1409,7 +1406,7 @@ function playSkip(strength, skipN, profile = stoneAudioProfile()) {
   const env = ctx.createGain();
   osc.type = 'sine'; osc.frequency.value = freq;
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(0.20 * strength, now + 0.003);
+  env.gain.linearRampToValueAtTime(0.13 * strength, now + 0.003);
   env.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
   osc.connect(env); env.connect(dry); env.connect(reverbSend);
   osc.start(now); osc.stop(now + 0.7);
@@ -1420,7 +1417,7 @@ function playSkip(strength, skipN, profile = stoneAudioProfile()) {
   thud.type = 'sine';
   thud.frequency.setValueAtTime(110 * strength, now);
   thud.frequency.exponentialRampToValueAtTime(38, now + 0.09);
-  tEnv.gain.setValueAtTime(0.30 * strength, now);
+  tEnv.gain.setValueAtTime(0.20 * strength, now);
   tEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
   thud.connect(tEnv); tEnv.connect(dry);
   thud.start(now); thud.stop(now + 0.12);
@@ -1473,8 +1470,7 @@ function playLaunch(strength) {
   flt.frequency.exponentialRampToValueAtTime(5000, now + 0.18);
 
   const env = ctx.createGain();
-  env.gain.setValueAtTime(0.14 * strength, now);
-  env.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+  env.gain.setValueAtTime(0, now);
 
   src.connect(flt); flt.connect(env); env.connect(reverbSend);
   src.start(now); src.stop(now + 0.25);
@@ -1489,7 +1485,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
   const root = transposed(magic.root, magic.transpose + stoneProfile.transpose * magic.rootScale);
   const chargeEnd = now + magic.charge;
   const finish = now + magic.finish;
-  const dropStart = chargeEnd - 0.36;
+  const dropStart = chargeEnd - 0.46;
   const scale = magic.scale;
 
   function sparkle(t, semi, gain, tail = 0.18, wave = magic.wave) {
@@ -1562,9 +1558,11 @@ function playPurchaseMagic(typeIndex, level = 1) {
 
   for (let i = 0; i < magic.count; i++) {
     const p = i / Math.max(1, magic.count - 1);
-    const t = now + Math.pow(p, 0.76) * (magic.charge - 0.18) + Math.random() * 0.055;
-    const semi = scale[(i * 3 + typeIndex + Math.floor(p * 7)) % scale.length] + (p > 0.74 ? 12 : 0);
-    const gain = 0.009 + p * (0.030 + level * 0.004);
+    const t = now + Math.pow(p, 0.68) * (magic.charge - 0.46) + Math.random() * 0.045;
+    const semi = scale[(i * 5 + typeIndex * 2 + Math.floor(p * 11)) % scale.length]
+      + (p > 0.52 && Math.random() < 0.20 ? 12 : 0)
+      + (p > 0.80 && Math.random() < 0.32 ? 12 : 0);
+    const gain = 0.014 + p * 0.020;
     sparkle(t, semi, gain, 0.14 + p * 0.18);
   }
 
@@ -1630,14 +1628,69 @@ function playPurchaseMagic(typeIndex, level = 1) {
   src.connect(flt); flt.connect(noiseEnv); noiseEnv.connect(reverbSend);
   src.start(now); src.stop(finish);
 
-  scale.concat(scale.slice(-2).map(semi => semi + 12)).slice(0, 8).forEach((semi, i) => {
-    sparkle(
-      chargeEnd - magic.burst.preRoll + i * magic.burst.gap,
-      semi,
-      magic.burst.gain + level * 0.006,
-      magic.burst.tail + i * 0.010,
-      magic.wave
-    );
+  // Flash chime: главный яркий чайм на вспышку
+  {
+    const freq = transposed(root, 36);
+    const osc = ctx.createOscillator(); const env = ctx.createGain();
+    osc.type = 'sine'; osc.frequency.setValueAtTime(freq, chargeEnd);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.93, chargeEnd + 0.32);
+    env.gain.setValueAtTime(0.22, chargeEnd);
+    env.gain.exponentialRampToValueAtTime(0.001, chargeEnd + 0.32);
+    osc.connect(env); env.connect(dry); env.connect(reverbSend);
+    osc.start(chargeEnd); osc.stop(chargeEnd + 0.34);
+  }
+
+  // Buildup sparks: накопление энергии (редкие → плотные к dropStart)
+  const fwSemis = [12, 15, 19, 22, 24, 27, 31, 34, 36, 39, 43];
+  const buildDur = chargeEnd - 0.18 - now;
+  for (let i = 0; i < 55; i++) {
+    const progress = Math.pow(Math.random(), 0.42);
+    const ft = now + progress * buildDur;
+    const semi = fwSemis[Math.floor(Math.random() * fwSemis.length)];
+    const freq = transposed(root, semi);
+    const dur = 0.010 + Math.random() * 0.052;
+    const fg = (0.080 + Math.random() * 0.110) * (0.12 + progress * 0.88);
+    const fo = ctx.createOscillator();
+    const fe = ctx.createGain();
+    fo.type = 'sine';
+    fo.frequency.setValueAtTime(freq, ft);
+    fo.frequency.exponentialRampToValueAtTime(Math.max(20, freq * (0.72 + Math.random() * 0.22)), ft + dur);
+    fe.gain.setValueAtTime(fg, ft);
+    fe.gain.exponentialRampToValueAtTime(0.001, ft + dur);
+    fo.connect(fe); fe.connect(dry); fe.connect(reverbSend);
+    fo.start(ft); fo.stop(ft + dur + 0.01);
+  }
+
+  // Shake sparkles: пара искор на тряску камня
+  [chargeEnd - 0.18, chargeEnd - 0.05].forEach(ft_base => {
+    const ft = ft_base + Math.random() * 0.04;
+    const semi = fwSemis[Math.floor(Math.random() * fwSemis.length)];
+    const freq = transposed(root, semi);
+    const dur = 0.015 + Math.random() * 0.028;
+    const fo = ctx.createOscillator(); const fe = ctx.createGain();
+    fo.type = 'sine';
+    fo.frequency.setValueAtTime(freq, ft);
+    fo.frequency.exponentialRampToValueAtTime(Math.max(20, freq * 0.88), ft + dur);
+    fe.gain.setValueAtTime(0.06 + Math.random() * 0.04, ft);
+    fe.gain.exponentialRampToValueAtTime(0.001, ft + dur);
+    fo.connect(fe); fe.connect(dry); fe.connect(reverbSend);
+    fo.start(ft); fo.stop(ft + dur + 0.01);
+  });
+
+  // Quick trailing chimes: быстрые переливы как летящие искры
+  [43, 39, 46, 36, 43, 39].forEach((semi, i) => {
+    const ft = chargeEnd + 0.06 + i * 0.055 + Math.random() * 0.018;
+    const freq = transposed(root, semi);
+    const tail = 0.08 + Math.random() * 0.06;
+    const fg = (0.10 - i * 0.013) * (0.85 + Math.random() * 0.3);
+    const fo = ctx.createOscillator(); const fe = ctx.createGain();
+    fo.type = 'sine';
+    fo.frequency.setValueAtTime(freq, ft);
+    fo.frequency.exponentialRampToValueAtTime(freq * (0.92 + Math.random() * 0.05), ft + tail);
+    fe.gain.setValueAtTime(fg, ft);
+    fe.gain.exponentialRampToValueAtTime(0.001, ft + tail);
+    fo.connect(fe); fe.connect(dry); fe.connect(reverbSend);
+    fo.start(ft); fo.stop(ft + tail + 0.01);
   });
 }
 
@@ -2708,8 +2761,8 @@ $shopUpgrade.addEventListener('click', () => {
     shopLevels[shopIndex] = level + 1;
     writeShopLevels();
     updateScore();
-    spawnPurchaseEffect();
     playPurchaseMagic(item.typeIndex, level + 1);
+    setTimeout(() => spawnPurchaseEffect(), 150);
   }
 });
 
