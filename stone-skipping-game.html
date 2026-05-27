@@ -1406,7 +1406,7 @@ function playSkip(strength, skipN, profile = stoneAudioProfile()) {
   const env = ctx.createGain();
   osc.type = 'sine'; osc.frequency.value = freq;
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(0.13 * strength, now + 0.003);
+  env.gain.linearRampToValueAtTime(0.091 * strength, now + 0.003);
   env.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
   osc.connect(env); env.connect(dry); env.connect(reverbSend);
   osc.start(now); osc.stop(now + 0.7);
@@ -1417,7 +1417,7 @@ function playSkip(strength, skipN, profile = stoneAudioProfile()) {
   thud.type = 'sine';
   thud.frequency.setValueAtTime(110 * strength, now);
   thud.frequency.exponentialRampToValueAtTime(38, now + 0.09);
-  tEnv.gain.setValueAtTime(0.20 * strength, now);
+  tEnv.gain.setValueAtTime(0.14 * strength, now);
   tEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
   thud.connect(tEnv); tEnv.connect(dry);
   thud.start(now); thud.stop(now + 0.12);
@@ -1434,7 +1434,7 @@ function playSink() {
   osc.type = 'sine';
   osc.frequency.setValueAtTime(310, now);
   osc.frequency.exponentialRampToValueAtTime(52, now + 1.1);
-  env.gain.setValueAtTime(0.22, now);
+  env.gain.setValueAtTime(0.11, now);
   env.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
   osc.connect(env); env.connect(dry); env.connect(reverbSend);
   osc.start(now); osc.stop(now + 1.2);
@@ -1445,7 +1445,7 @@ function playSink() {
     const b = ctx.createOscillator();
     const bg = ctx.createGain();
     b.type = 'sine'; b.frequency.value = 450 + Math.random() * 800;
-    bg.gain.setValueAtTime(0.08, t);
+    bg.gain.setValueAtTime(0.04, t);
     bg.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
     b.connect(bg); bg.connect(reverbSend);
     b.start(t); b.stop(t + 0.12);
