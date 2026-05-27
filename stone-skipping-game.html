@@ -2130,7 +2130,7 @@ function awardChallenge(match, drop) {
   if (match.miss) stone.skipN = match.target.value;
   drop.isWin = true;
   winDrop = drop;
-  if (stone.typeIndex === 4 && !stone.bonusMultiplier) {
+  if (stone.typeIndex === 4) {
     const level = upgradeLevel(4);
     if (level > 0) pendingTriangleBonus = level + 1;
   }
@@ -2581,6 +2581,7 @@ function checkFishBonusHit() {
     drops.push(new Drop(stone.x, stone.y, t, 0.55, DECAY_D * 0.8, 0.28));
     updateScore();
     spawnPlopPopup(f.x, f.y);
+    playWin();
     break;
   }
 }
