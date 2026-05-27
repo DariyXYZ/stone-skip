@@ -2,7 +2,7 @@
 
 Linear source of truth:
 
-1. Edit art in `stone-skipping-shop-assets-editor.html`.
+1. Edit art in local-only `stone-skipping-shop-assets-editor.html`.
 2. Click `Save browser draft` to preview the change in the game.
 3. Tell Codex: `bake assets`.
 4. Codex runs `python tools/bake_assets.py`.
@@ -11,6 +11,10 @@ Linear source of truth:
 The browser draft is temporary. The durable asset source is
 `assets/stone-skipping-assets.json`, and the baked playable fallback is the
 embedded `ASSET_PACK` in `stone-skipping-game.html`.
+
+`stone-skipping-shop-assets-editor.html` is intentionally ignored by Git. Keep
+it local for development, but do not publish it with the playable GitHub Pages
+build.
 
 Fallback when browser storage is unavailable: use `Download patch` in the
 editor, put that JSON in the repo, then run

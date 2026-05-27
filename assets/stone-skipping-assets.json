@@ -1,9 +1,9 @@
 {
   "meta": {
-    "version": 5,
+    "version": 6,
     "name": "stone-skipping-game-core",
     "splashCoverVersion": 5,
-    "shopFrameVersion": 2,
+    "shopFrameVersion": 3,
     "splashTitleVersion": 1
   },
   "glyphs": {

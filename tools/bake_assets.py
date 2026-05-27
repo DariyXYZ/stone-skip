@@ -27,11 +27,11 @@ CANONICAL_ASSETS = ROOT / "assets" / "stone-skipping-assets.json"
 STORAGE_KEY = "stone-skipping-game-asset-patch-v1"
 DEFAULT_ORIGIN = "http://localhost:8027"
 DEFAULT_META = {
-  "version": 5,
+  "version": 6,
   "name": "stone-skipping-game-core",
   "splashCoverVersion": 5,
   "splashTitleVersion": 1,
-  "shopFrameVersion": 2,
+  "shopFrameVersion": 3,
 }
 
 
@@ -204,6 +204,7 @@ def normalize_assets(assets: dict[str, Any]) -> dict[str, Any]:
   meta = dict(normalized.get("meta") or {})
   for key, value in DEFAULT_META.items():
     meta.setdefault(key, value)
+  meta["version"] = max(int(meta.get("version") or 0), DEFAULT_META["version"])
   normalized["meta"] = meta
   return normalized
 
