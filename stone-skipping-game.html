@@ -1278,13 +1278,14 @@ function initAudio() {
   droneOut.gain.value = 0;
   droneOut.connect(dry);
   droneOut.connect(reverbSend);
-  [[55, 0.035], [55.3, 0.022], [82.5, 0.018], [110, 0.010]].forEach(([f, v]) => {
+  [[42, 0.045], [55, 0.035], [55.3, 0.022], [82.5, 0.018], [84, 0.014], [110, 0.010]].forEach(([f, v]) => {
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.type = 'sine'; o.frequency.value = f; g.gain.value = v;
+    if (f === 84) o.detune.value = -7;
     o.connect(g); g.connect(droneOut); o.start();
   });
-  droneOut.gain.setTargetAtTime(0.26, ctx.currentTime + 0.2, 4.0);
+  droneOut.gain.setTargetAtTime(0.38, ctx.currentTime + 0.2, 4.0);
 
   // ── Shimmer layer (bandpass noise, reacts to wave count) ─────────────
   const noiseLen = ctx.sampleRate * 4;
@@ -1313,6 +1314,26 @@ function initAudio() {
   const lfoGain = ctx.createGain();
   lfo.frequency.value = 0.045; lfoGain.gain.value = 420;
   lfo.connect(lfoGain); lfoGain.connect(shimFilter.frequency); lfo.start();
+
+  // ── Cave ambient rumble (brown noise 260 Hz, breathes at 0.15 Hz) ────
+  const caveBuf = ctx.createBuffer(1, noiseLen, ctx.sampleRate);
+  const caveNd = caveBuf.getChannelData(0);
+  let caveVal = 0;
+  for (let i = 0; i < noiseLen; i++) caveVal = caveNd[i] = (caveVal + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+  const caveSrc = ctx.createBufferSource();
+  caveSrc.buffer = caveBuf; caveSrc.loop = true;
+  const caveFilter = ctx.createBiquadFilter();
+  caveFilter.type = 'bandpass'; caveFilter.frequency.value = 260; caveFilter.Q.value = 0.7;
+  const caveGain = ctx.createGain();
+  caveGain.gain.value = 0;
+  caveSrc.connect(caveFilter); caveFilter.connect(caveGain);
+  caveGain.connect(dry); caveGain.connect(reverbSend);
+  caveSrc.start();
+  caveGain.gain.setTargetAtTime(0.32, ctx.currentTime + 0.5, 3.5);
+  const caveLfo = ctx.createOscillator();
+  const caveLfoGain = ctx.createGain();
+  caveLfo.frequency.value = 0.15; caveLfoGain.gain.value = 80;
+  caveLfo.connect(caveLfoGain); caveLfoGain.connect(caveFilter.frequency); caveLfo.start();
 
   audio = { ctx, dry, reverbSend, shimGain, shimFilter };
 }
@@ -3528,6 +3549,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.removeEventListener('keydown', spGo);
     document.removeEventListener('click', spGo);
     spPrompt.classList.remove('on');
+    initAudio();
+    if (audio) audio.ctx.resume();
 
     const W = window.innerWidth, H = window.innerHeight;
     const spStyle = getComputedStyle(spStage);
@@ -3617,6 +3640,7 @@ document.addEventListener('DOMContentLoaded', function() {
       splashR: 1.62,
       seed:    skipN * 1.618,
       });
+      playSkip(Math.max(0.28, 0.92 - skipN * 0.07), skipN, STONE_AUDIO_FALLBACKS[1]);
     }
 
     function updateSplashStone(st, dt, simT) {
