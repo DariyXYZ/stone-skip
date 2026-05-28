@@ -389,6 +389,68 @@ body[data-theme="day"] #win-ring {
 #sp-prompt.on { opacity:1; }
 #sp-prompt span { animation:spblink 1.4s step-end infinite; }
 @keyframes spblink { 50%{opacity:0} }
+#lore-screen {
+  position:fixed; inset:0; z-index:201;
+  background:var(--splash-bg);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding:2em 1.5em;
+}
+.lore-p {
+  font-family:'Courier New',monospace;
+  font-size:clamp(11px,1.8vw,17px);
+  color:var(--splash-title);
+  text-align:center;
+  line-height:1.55;
+  letter-spacing:0.04em;
+  margin:0;
+  opacity:0; transform:translateY(6px);
+  transition:opacity .6s ease, transform .6s ease;
+}
+.lore-p.on  { opacity:1; transform:translateY(0); }
+.lore-p.gap { margin-top:1.4em; }
+#lore-prompt {
+  font-family:'Courier New',monospace;
+  font-size:clamp(9px,1.2vw,13px);
+  color:var(--splash-prompt);
+  letter-spacing:4px;
+  opacity:0; transition:opacity .5s;
+  margin-top:2.5em; white-space:nowrap;
+}
+#lore-prompt.on  { opacity:1; }
+#lore-prompt span { animation:spblink 1.4s step-end infinite; }
+#challenge.tut-highlight .ch-card { animation:tutGlow .9s ease-in-out infinite; }
+#tut-tip {
+  position:fixed; bottom:18%; left:50%;
+  transform:translateX(-50%);
+  font-family:'Courier New',monospace;
+  font-size:clamp(11px,1.8vw,17px);
+  color:var(--win); text-align:center;
+  opacity:0; transition:opacity .4s;
+  pointer-events:none; white-space:pre;
+  text-shadow:0 0 16px currentColor; letter-spacing:1px;
+  z-index:155;
+}
+#tut-tip.on { opacity:1; }
+#tut-score-flash {
+  position:fixed; top:42%; left:50%;
+  transform:translate(-50%,-50%);
+  font-family:'Courier New',monospace;
+  font-size:clamp(22px,4.5vw,44px);
+  color:var(--win); pointer-events:none;
+  text-shadow:0 0 20px currentColor;
+  z-index:155;
+}
+@keyframes tutGlow {
+  0%,100% { filter:drop-shadow(0 0 6px var(--win)) drop-shadow(0 0 14px var(--win)); color:var(--win); }
+  50%     { filter:drop-shadow(0 0 3px var(--win)); }
+}
+@keyframes tutScoreFlash {
+  0%   { opacity:0; transform:translate(-50%,-50%) scale(.8); }
+  20%  { opacity:1; transform:translate(-50%,-50%) scale(1.1); }
+  65%  { opacity:1; transform:translate(-50%,-65%); }
+  100% { opacity:0; transform:translate(-50%,-90%); }
+}
 </style>
 </head>
 <body>
@@ -2248,6 +2310,7 @@ function clampPullPoint(gx, gy) {
 $waves.addEventListener('mousedown', e => {
   initAudio();
   if (audio) audio.ctx.resume();
+  if (tutorialActive) return;
   if (stone.state !== 'idle') return;
   e.preventDefault();
   const { gx, gy } = toGrid(e);
@@ -2322,6 +2385,7 @@ function releaseStone() {
 $waves.addEventListener('touchstart', e => {
   initAudio();
   if (audio) audio.ctx.resume();
+  if (tutorialActive) return;
   if (stone.state !== 'idle') return;
   const { gx, gy } = toGrid(touchPos(e));
   const dx = gx - stone.x, dy = gy - stone.y;
@@ -2968,7 +3032,7 @@ function renderBand() {
     prevY = cy;
   }
 
-  if (stone.typeIndex === 1) {
+  if (!tutorialActive && stone.typeIndex === 1) {
     const readLevel = upgradeLevel(1);
     if (readLevel > 0) {
       const pull = Math.sqrt((stone.x - stone.spawnX) ** 2 + (stone.y - stone.spawnY) ** 2);
@@ -3333,6 +3397,163 @@ window.addEventListener('orientationchange', scheduleRelayout);
 window.visualViewport?.addEventListener('resize', scheduleRelayout);
 function startGame() { requestAnimationFrame(frame); }
 
+let tutorialActive = false;
+
+function showLoreScreen() {
+  const screen = document.createElement('div');
+  screen.id = 'lore-screen';
+  const LORE = [
+    { t: 'A meteor fell from the sky',                  gap: false },
+    { t: 'and carved a crater into the earth.',         gap: false },
+    { t: 'Rain filled the hollow with dark water.',     gap: true  },
+    { t: 'Strange smooth stones scattered on the shore.', gap: false },
+    { t: 'Now it is a place for skipping stones.',      gap: true  },
+  ];
+  const paras = LORE.map(({t, gap}) => {
+    const p = document.createElement('p');
+    p.className = 'lore-p' + (gap ? ' gap' : '');
+    p.textContent = t;
+    screen.appendChild(p);
+    return p;
+  });
+  const prompt = document.createElement('div');
+  prompt.id = 'lore-prompt';
+  prompt.innerHTML = '<span>·</span> press any key <span>·</span>';
+  screen.appendChild(prompt);
+  document.body.appendChild(screen);
+
+  let delay = 400;
+  paras.forEach(p => {
+    setTimeout(() => p.classList.add('on'), delay);
+    delay += 420;
+  });
+  setTimeout(() => {
+    prompt.classList.add('on');
+    const go = () => {
+      document.removeEventListener('keydown', go);
+      document.removeEventListener('click', go);
+      screen.style.transition = 'opacity .4s ease';
+      screen.style.opacity = '0';
+      setTimeout(() => {
+        screen.remove();
+        startGame();
+        startTutorial();
+      }, 420);
+    };
+    document.addEventListener('keydown', go, {once:true});
+    document.addEventListener('click', go, {once:true});
+  }, delay + 300);
+}
+
+function startTutorial() {
+  tutorialActive = true;
+  const $ch = document.getElementById('challenge');
+
+  const tip = document.createElement('div');
+  tip.id = 'tut-tip';
+  tip.style.whiteSpace = 'pre-line';
+  document.body.appendChild(tip);
+
+  function showTip(text) {
+    tip.classList.remove('on');
+    setTimeout(() => { tip.textContent = text; tip.classList.add('on'); }, 220);
+  }
+  function hideTip() { tip.classList.remove('on'); }
+
+  function showScoreFlash(text) {
+    const f = document.createElement('div');
+    f.id = 'tut-score-flash';
+    f.textContent = text;
+    f.style.animation = 'tutScoreFlash 1.5s ease forwards';
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 1600);
+  }
+
+  function endTutorial(delay) {
+    setTimeout(() => {
+      $ch.classList.remove('tut-highlight');
+      showTip('Collect plops\nbuy upgrades in the shop\nGood luck!');
+      setTimeout(() => {
+        tip.style.transition = 'opacity .8s ease';
+        tip.style.opacity = '0';
+        setTimeout(() => { tip.remove(); tutorialActive = false; }, 900);
+      }, 3500);
+    }, delay);
+  }
+
+  // Step 1: highlight challenge targets + explain
+  setTimeout(() => {
+    $ch.classList.add('tut-highlight');
+    showTip('Hit any of these numbers\nwith your stone');
+  }, 800);
+
+  // Step 2: scripted demo throw — guaranteed win
+  setTimeout(() => {
+    hideTip();
+
+    // Use predictedSkipCountFromPull to guarantee target match
+    const PULL_DIST = 6;
+    const N = predictedSkipCountFromPull(PULL_DIST);
+    const tierIdx = CHALLENGE_TIERS.findIndex(t => N >= t.min && N <= t.max);
+    const tIdx = tierIdx >= 0 ? tierIdx : (N < CHALLENGE_TIERS[0].min ? 0 : 2);
+    const tier = CHALLENGE_TIERS[tIdx];
+    challengeTargets[tIdx] = { ...tier, value: Math.max(tier.min, Math.min(tier.max, N)) };
+    updateChallenge();
+
+    // Animate stone being grabbed and pulled back
+    stone.state = 'grabbed';
+    $hint.style.opacity = '0';
+    const spX = stone.spawnX, spY = stone.spawnY;
+    const pullTargetX = spX - PULL_DIST;
+    const PULL_DUR = 1100;
+    const pullStart = performance.now();
+
+    function animatePull(ts) {
+      const t = Math.min(1, (ts - pullStart) / PULL_DUR);
+      const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+      stone.x = spX + (pullTargetX - spX) * ease;
+      stone.y = spY;
+      if (t < 1) { requestAnimationFrame(animatePull); }
+      else { setTimeout(launch, 450); }
+    }
+
+    function launch() {
+      stone.vx = PULL_DIST * POWER * stone.powerMod;
+      stone.vy = 0;
+      stone.x  = spX; stone.y = spY;
+      stone.state = 'flying';
+      stone.skipTimer = Math.max(0.07, 0.007 * stone.vx);
+      stone.curveDir = 0;
+      playLaunch(0.7, stoneAudioProfile());
+
+      showTip('skip across the water\nand hit the target');
+
+      let resultChecked = false;
+      const poll = setInterval(() => {
+        if (!resultChecked && stone.state === 'sinking') {
+          resultChecked = true;
+          clearInterval(poll);
+          const won = challengeWon, hit = challengeHit;
+          hideTip();
+          if (won && hit) {
+            const hitTier = CHALLENGE_TIERS.find(x => x.key === challengeTargets[hit.index]?.key);
+            const r = hitTier ? hitTier.reward : 1;
+            setTimeout(() => {
+              showScoreFlash(`+${r} plop${r !== 1 ? 's' : ''}!`);
+              endTutorial(1700);
+            }, 350);
+          } else {
+            endTutorial(400);
+          }
+        }
+      }, 80);
+    }
+
+    showTip('watch how to throw...');
+    requestAnimationFrame(animatePull);
+  }, 3800);
+}
+
 // ── Splash ────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
   const SP_ILLUS = `                                                                                                                                                                                                                            
@@ -3676,6 +3897,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const spSpans = spStage.querySelectorAll('.spln');
   const spTotal = spSpans.length * DELAY;
   let spStarted = false;
+
   spSpans.forEach((el, i) => setTimeout(() => el.classList.add('on'), i * DELAY));
   setTimeout(() => spTitle.classList.add('on'), spTotal + 60);
   setTimeout(() => {
@@ -3688,11 +3910,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (spStarted) return;
     spStarted = true;
     document.removeEventListener('keydown', spGo);
-    document.removeEventListener('click', spGo);
+    document.removeEventListener('click',   spGo);
     spPrompt.classList.remove('on');
     initAudio();
     if (audio) audio.ctx.resume();
 
+    {
     const W = window.innerWidth, H = window.innerHeight;
     const spStyle = getComputedStyle(spStage);
     const SP_FONT = parseFloat(spStyle.fontSize) || 14;
@@ -3977,10 +4200,11 @@ document.addEventListener('DOMContentLoaded', function() {
         ringPre.remove();
         splashStoneEls.forEach(el => el.remove());
         document.getElementById('splash').remove();
-        startGame();
+        showLoreScreen();
       }
     }
     requestAnimationFrame(spFrame);
+    }
   }
 });
 
