@@ -111,9 +111,9 @@
         "upgradeType": "tierReward",
         "maxLevel": 3,
         "costs": [
-          40,
-          70,
-          110
+          4,
+          7,
+          11
         ],
         "descs": [
           "Small targets pay +2 when this heavy round stone hits.",
@@ -130,9 +130,9 @@
         "upgradeType": "aimRead",
         "maxLevel": 3,
         "costs": [
-          35,
-          65,
-          100
+          4,
+          7,
+          10
         ],
         "descs": [
           "Aim preview shows a loose plop range.",
@@ -149,9 +149,9 @@
         "upgradeType": "hardStop",
         "maxLevel": 3,
         "costs": [
-          45,
-          80,
-          120
+          5,
+          8,
+          12
         ],
         "descs": [
           "Stops on target when the block is already slowing down.",
@@ -168,9 +168,9 @@
         "upgradeType": "luckyChance",
         "maxLevel": 3,
         "costs": [
-          55,
-          95,
-          140
+          6,
+          10,
+          14
         ],
         "descs": [
           "Near misses within 2 plops count for the star.",
@@ -187,9 +187,9 @@
         "upgradeType": "streakMultiplier",
         "maxLevel": 3,
         "costs": [
-          65,
-          110,
-          160
+          7,
+          11,
+          16
         ],
         "descs": [
           "A triangle hit prepares a green 2x triangle for the next throw.",
@@ -206,7 +206,7 @@
         "upgradeType": "fishBonus",
         "maxLevel": 1,
         "costs": [
-          60
+          6
         ],
         "descs": [
           "Gain +1 plop when the diamond clips a fish."

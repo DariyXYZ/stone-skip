@@ -179,6 +179,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   position:fixed; bottom:10px; left:50%;
   transform:translateX(-50%);
   color:var(--hint); font-family:monospace; font-size:11px;
+  white-space:nowrap; text-align:center;
   pointer-events:none; transition:opacity 0.5s;
 }
 #score {
@@ -334,25 +335,29 @@ body[data-theme="day"] #win-ring {
   #hint { bottom:calc(14px + env(safe-area-inset-bottom, 0px)); }
   #shop-panel {
     width:min(94vw, 430px);
-    height:min(86svh, 660px);
+    height:min(84svh, 660px);
     min-height:0;
   }
   #shop-panel > div {
-    padding:48px 34px 60px;
+    padding:44px 32px 54px;
   }
   .shop-center {
-    width:38ch;
-    row-gap:30px;
+    width:min(36ch, 100%);
+    row-gap:26px;
   }
   #shop-art {
     width:100%;
-    font-size:13px;
+    font-size:12px;
   }
   .shop-copy {
-    width:38ch;
+    width:min(36ch, 100%);
+    font-size:13px;
   }
+  #shop-name, #shop-price { font-size:16px }
+  #shop-desc { min-height:48px }
+  .shop-actions { margin-top:22px; }
   .shop-arrow {
-    top:calc((100% - 60px - 48px) / 2 + 48px);
+    top:calc((100% - 54px - 44px) / 2 + 44px);
     font-size:24px;
   }
 }
@@ -674,7 +679,7 @@ const ASSET_PACK = {
         typeIndex: 0,
         upgradeType: "tierReward",
         maxLevel: 3,
-        costs: [40, 70, 110],
+        costs: [4, 7, 11],
         descs: ["Small targets pay +2 when this heavy round stone hits.", "Small targets pay +2 and mid targets pay +3.", "Small, mid, and high targets all pay one extra plop."],
         desc: "Upgrade target rewards for the heavy round stone.",
         art: String.raw`       _..·˙˙˙˙··~.
@@ -699,7 +704,7 @@ const ASSET_PACK = {
         typeIndex: 1,
         upgradeType: "aimRead",
         maxLevel: 3,
-        costs: [35, 65, 100],
+        costs: [4, 7, 10],
         descs: ["Aim preview shows a loose plop range.", "Aim preview narrows the expected plop range.", "Aim preview shows the exact plop count."],
         desc: "Read likely plop counts while aiming the small round stone.",
         art: String.raw`         .·˙˙˙˙˙·.
@@ -718,7 +723,7 @@ const ASSET_PACK = {
         typeIndex: 2,
         upgradeType: "hardStop",
         maxLevel: 3,
-        costs: [45, 80, 120],
+        costs: [5, 8, 12],
         descs: ["Stops on target when the block is already slowing down.", "Stops on target earlier, before the final weak skips.", "Stops hard on any target it reaches, great for small targets."],
         desc: "Make the heavy block stop cleanly when it reaches a target.",
         art: String.raw`    .··˙˙˙˙-·˙˙˙˙˙˙˙˙*˙-.
@@ -743,7 +748,7 @@ const ASSET_PACK = {
         typeIndex: 3,
         upgradeType: "luckyChance",
         maxLevel: 3,
-        costs: [55, 95, 140],
+        costs: [6, 10, 14],
         descs: ["Near misses within 2 plops count for the star.", "Near misses within 3 plops count for the star.", "Near misses within 4 plops count for the star."],
         desc: "Let the star correct bigger near misses into a win.",
         art: String.raw`           ,.
@@ -764,7 +769,7 @@ const ASSET_PACK = {
         typeIndex: 4,
         upgradeType: "streakMultiplier",
         maxLevel: 3,
-        costs: [65, 110, 160],
+        costs: [7, 11, 16],
         descs: ["A triangle hit prepares a green 2x triangle for the next throw.", "A triangle hit prepares a green 3x triangle for the next throw.", "A triangle hit prepares a green 4x triangle for the next throw."],
         desc: "Reward two triangle hits in a row with a green multiplier stone.",
         art: String.raw`       .,~~.
@@ -785,7 +790,7 @@ const ASSET_PACK = {
         typeIndex: 5,
         upgradeType: "fishBonus",
         maxLevel: 1,
-        costs: [60],
+        costs: [6],
         descs: ["Gain +1 plop when the diamond clips a fish."],
         desc: "The flat diamond scores a bonus plop for hitting fish.",
         art: String.raw`                    ,~·.
@@ -1066,6 +1071,30 @@ function fitRasterLine(line, targetCols) {
   return `${' '.repeat(margin)}${fitted}${' '.repeat(margin)}`.slice(0, cols).padEnd(cols, ' ');
 }
 
+function fitFrameOrnamentLine(line, targetCols) {
+  const source = String(line || '').trimEnd();
+  const cols = Math.max(2, targetCols | 0);
+  if (!source.trim()) return ' '.repeat(cols);
+  if (source.length <= cols) {
+    const left = Math.max(0, Math.floor((cols - source.length) / 2));
+    return `${' '.repeat(left)}${source}`.slice(0, cols).padEnd(cols, ' ');
+  }
+
+  const margin = cols > 44 ? 3 : 1;
+  const inner = Math.max(2, cols - margin * 2);
+  const keepSide = Math.max(8, Math.min(18, Math.floor(inner * 0.30)));
+  const keepCenter = Math.max(5, inner - keepSide * 2);
+  const centerStart = Math.max(0, Math.floor((source.length - keepCenter) / 2));
+  const left = source.slice(0, keepSide).trimEnd();
+  const center = source.slice(centerStart, centerStart + keepCenter).trim();
+  const right = source.slice(-keepSide).trimStart();
+  const row = Array(cols).fill(' ');
+  placeText(row, left, margin);
+  placeText(row, center, Math.max(margin + left.length + 1, Math.floor((cols - center.length) / 2)));
+  placeText(row, right, Math.max(0, cols - margin - right.length));
+  return row.join('');
+}
+
 function placeText(row, text, x) {
   for (let i = 0; i < text.length; i++) {
     const nx = x + i;
@@ -1077,27 +1106,25 @@ function portraitShopFrameRaster(raster, targetCols, targetRows) {
   const lines = String(raster || '').replace(/\r/g, '').split('\n');
   const cols = Math.max(28, targetCols | 0);
   const rows = Math.max(20, targetRows | 0);
-  const frame = assets.components.frames.shop;
   const out = Array.from({ length: rows }, () => Array(cols).fill(' '));
+  const nonEmpty = lines
+    .map((line, index) => ({ line, index }))
+    .filter(item => item.line.trim());
 
-  for (let y = 1; y < rows - 1; y++) {
-    out[y][0] = frame.v;
-    out[y][cols - 1] = frame.v;
-  }
-
-  const topRows = [lines[0], lines[1]].filter(Boolean).map(line => fitRasterLine(line, cols));
-  const bottomSource = [lines[30], lines[31], lines[32]].filter(Boolean);
-  const bottomRows = bottomSource.map(line => fitRasterLine(line, cols));
+  const topRows = nonEmpty.slice(0, 2).map(item => fitFrameOrnamentLine(item.line, cols));
+  const bottomSource = nonEmpty.slice(-4).map(item => item.line);
+  const bottomRows = bottomSource.map(line => fitFrameOrnamentLine(line, cols));
 
   topRows.forEach((line, y) => placeText(out[y], line, 0));
   bottomRows.forEach((line, i) => placeText(out[rows - bottomRows.length + i], line, 0));
 
   const upperFishY = Math.min(rows - 8, Math.max(5, Math.round(rows * 0.22)));
   const lowerFishY = Math.min(rows - 7, Math.max(upperFishY + 8, Math.round(rows * 0.72)));
-  placeText(out[upperFishY], '><>', 6);
-  placeText(out[upperFishY], '<><', cols - 9);
-  placeText(out[lowerFishY], '><>', 6);
-  placeText(out[lowerFishY], '<><', cols - 9);
+  const fishInset = Math.max(4, Math.min(9, Math.floor(cols * 0.12)));
+  placeText(out[upperFishY], '><>', fishInset);
+  placeText(out[upperFishY], '<><', cols - fishInset - 3);
+  placeText(out[lowerFishY], '><>', fishInset);
+  placeText(out[lowerFishY], '<><', cols - fishInset - 3);
 
   return out.map(row => row.join('')).join('\n');
 }
@@ -2038,7 +2065,7 @@ const CHALLENGE_TIERS = [
 let challengeTargets = [];
 let challengeHit = null;
 let challengeWon = false;
-let totalWins   = 5000;
+let totalWins   = 0;
 let shopIndex   = 0;
 const shopLevels = Array(SHOP_STONES.length).fill(0);
 let pendingTriangleBonus = 0;
@@ -2167,7 +2194,7 @@ function nextStoneTypeIndex() {
 
 function spawnStone() {
   const portrait = ORIENTATION === 'portrait';
-  stone.spawnX = Math.round(COLS * (portrait ? 0.18 : 0.10));
+  stone.spawnX = Math.round(COLS * (portrait ? 0.50 : 0.10));
   stone.spawnY = Math.round(ROWS * (portrait ? 0.72 : 0.50));
   stone.x = stone.spawnX; stone.y = stone.spawnY;
   const forcedTriangle = pendingTriangleBonus > 0;
@@ -3268,7 +3295,6 @@ initLayout();
 syncChromeLabels();
 renderShopFrame();
 pickTarget();
-localStorage.removeItem(SHOP_LEVELS_KEY); // debug: fresh shop each reload
 readShopLevels();
 spawnStone();
 updateScore();
@@ -3532,6 +3558,66 @@ document.addEventListener('DOMContentLoaded', function() {
     };
   }
 
+  const rawSplashTitle = assets.raster.splashTitle || '';
+
+  function cropSplashRasterLines(lines) {
+    let left = Infinity;
+    let right = -1;
+    lines.forEach(line => {
+      const first = line.search(/\S/);
+      if (first < 0) return;
+      left = Math.min(left, first);
+      right = Math.max(right, line.search(/\s*$/));
+    });
+    if (!Number.isFinite(left) || right <= left) return lines.map(line => line.trimEnd());
+    return lines.map(line => line.slice(left, right).trimEnd());
+  }
+
+  function wrapSplashTitleForViewport(raw) {
+    const lines = cropSplashRasterLines(String(raw || '').replace(/\r/g, '').split('\n'));
+    const size = splashTextSize(lines);
+    if (window.innerWidth > 720 || window.innerWidth >= window.innerHeight || size.cols < 120) {
+      return lines.join('\n');
+    }
+    const padded = lines.map(line => line.padEnd(size.cols, ' '));
+    const blankRuns = [];
+    let runStart = -1;
+    for (let x = 0; x < size.cols; x++) {
+      const blank = padded.every(line => line[x] === ' ');
+      if (blank && runStart < 0) runStart = x;
+      if ((!blank || x === size.cols - 1) && runStart >= 0) {
+        const end = blank && x === size.cols - 1 ? x + 1 : x;
+        if (end - runStart >= 4) blankRuns.push({ start: runStart, end, mid: (runStart + end) / 2 });
+        runStart = -1;
+      }
+    }
+    const split = blankRuns
+      .sort((a, b) => Math.abs(a.mid - size.cols / 2) - Math.abs(b.mid - size.cols / 2))[0];
+    if (!split) return lines.join('\n');
+    const normalize = block => {
+      let minLeft = Infinity;
+      block.forEach(line => {
+        const match = line.match(/\S/);
+        if (match) minLeft = Math.min(minLeft, match.index);
+      });
+      if (!Number.isFinite(minLeft)) return block.map(line => line.trimEnd());
+      return block.map(line => line.slice(minLeft).trimEnd());
+    };
+    const centerBlock = (block, targetWidth) => {
+      const width = Math.max(1, ...block.map(line => line.length));
+      const pad = ' '.repeat(Math.max(0, Math.floor((targetWidth - width) / 2)));
+      return block.map(line => pad + line);
+    };
+    const left = normalize(padded.map(line => line.slice(0, split.start)));
+    const right = normalize(padded.map(line => line.slice(split.end)));
+    const titleWidth = Math.max(
+      1,
+      ...left.map(line => line.length),
+      ...right.map(line => line.length)
+    );
+    return [...centerBlock(left, titleWidth), '', ...centerBlock(right, titleWidth)].join('\n');
+  }
+
   function measureSplashMonoRatio() {
     const probe = document.createElement('span');
     probe.textContent = 'M'.repeat(100);
@@ -3549,6 +3635,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function fitSplashLayout(stageLines) {
+    spTitle.textContent = wrapSplashTitleForViewport(rawSplashTitle);
     const stageSize = splashTextSize(stageLines);
     const titleLines = spTitle.textContent.replace(/\r/g, '').split('\n');
     const titleSize = splashTextSize(titleLines);
@@ -3558,7 +3645,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const verticalEms = (stageSize.rows + titleSize.rows) * metrics.lineH + 0.12 + 0.45 + promptRows;
     const fontByWidth = window.innerWidth * 0.94 / (maxCols * metrics.charW);
     const fontByHeight = window.innerHeight * 0.92 / verticalEms;
-    const fontSize = Math.max(3.5, Math.min(12, fontByWidth, fontByHeight));
+    const fontSize = Math.max(2.6, Math.min(12, fontByWidth, fontByHeight));
 
     document.documentElement.style.setProperty('--splash-font-size', `${fontSize}px`);
     document.documentElement.style.setProperty('--splash-stage-width', `${stageSize.cols}ch`);
