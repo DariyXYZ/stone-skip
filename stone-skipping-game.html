@@ -881,6 +881,12 @@ function cloneAsset(value) {
 const ASSET_STORAGE_KEY = 'stone-skipping-game-asset-patch-v1';
 const ASSET_STORAGE_BACKUP_KEY = 'stone-skipping-game-asset-patch-backup-v1';
 const SHOP_LEVELS_KEY = 'stone-skipping-game-shop-levels-v1';
+const URL_PARAMS = new URLSearchParams(location.search);
+const DEV_ASSET_TOOLS = URL_PARAMS.has('asset-editor')
+  || URL_PARAMS.has('dev-assets')
+  || location.protocol === 'file:'
+  || location.hostname === 'localhost'
+  || location.hostname === '127.0.0.1';
 const SPLASH_COVER_VERSION = ASSET_PACK.meta.splashCoverVersion;
 const SPLASH_TITLE_VERSION = ASSET_PACK.meta.splashTitleVersion;
 const SHOP_FRAME_VERSION = ASSET_PACK.meta.shopFrameVersion;
@@ -1226,16 +1232,18 @@ function syncAssetConsumers() {
   if (typeof updateChallenge === 'function') updateChallenge();
 }
 
-window.StoneSkipAssets = {
-  get: () => cloneAsset(assets),
-  defaults: () => cloneAsset(ASSET_PACK),
-  defaultShopFrameRaster: () => defaultShopFrameRaster(),
-  apply: applyAssetPatch,
-  save: patch => patch ? applyAssetPatch(patch, { persist: true }) : writeStoredAssetPatch(assets),
-  reset: resetAssets,
-  renderAll: syncAssetConsumers,
-};
-window.StoneSkipDefaultAssets = () => cloneAsset(ASSET_PACK);
+if (DEV_ASSET_TOOLS) {
+  window.StoneSkipAssets = {
+    get: () => cloneAsset(assets),
+    defaults: () => cloneAsset(ASSET_PACK),
+    defaultShopFrameRaster: () => defaultShopFrameRaster(),
+    apply: applyAssetPatch,
+    save: patch => patch ? applyAssetPatch(patch, { persist: true }) : writeStoredAssetPatch(assets),
+    reset: resetAssets,
+    renderAll: syncAssetConsumers,
+  };
+  window.StoneSkipDefaultAssets = () => cloneAsset(ASSET_PACK);
+}
 
 function assetEditorBridgePayload(id = null) {
   return {
@@ -1252,7 +1260,7 @@ function postAssetEditorPayload(id = null) {
   window.parent.postMessage(assetEditorBridgePayload(id), '*');
 }
 
-if (new URLSearchParams(location.search).has('asset-editor')) {
+if (DEV_ASSET_TOOLS && URL_PARAMS.has('asset-editor')) {
   window.addEventListener('message', event => {
     const message = event.data;
     if (!message || message.type !== 'stone-skip-assets-request') return;
@@ -1271,30 +1279,32 @@ if (new URLSearchParams(location.search).has('asset-editor')) {
 
 const STONE_SKIP_ASSET_CHANNEL = 'stone-skip-assets-v1';
 const stoneSkipAssetSourceId = `game-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const isAssetEditorFrame = new URLSearchParams(location.search).has('asset-editor');
-try {
-  const assetChannel = new BroadcastChannel(STONE_SKIP_ASSET_CHANNEL);
-  assetChannel.addEventListener('message', event => {
-    const message = event.data;
-    if (!message || message.type !== 'stone-skip-assets-request' || message.sourceId === stoneSkipAssetSourceId) return;
-    if (message.action === 'save' && message.patch) {
-      applyAssetPatch(message.patch, { persist: true });
-    } else if (message.action === 'apply' && message.patch) {
-      applyAssetPatch(message.patch);
-    } else if (message.action === 'reset') {
-      resetAssets();
-    }
-    assetChannel.postMessage({
-      type: 'stone-skip-assets-response',
-      id: message.id,
-      sourceId: stoneSkipAssetSourceId,
-      isAssetEditorFrame,
-      assets: cloneAsset(assets),
-      defaults: cloneAsset(ASSET_PACK),
-      defaultShopFrameRaster: defaultShopFrameRaster(),
+const isAssetEditorFrame = URL_PARAMS.has('asset-editor');
+if (DEV_ASSET_TOOLS) {
+  try {
+    const assetChannel = new BroadcastChannel(STONE_SKIP_ASSET_CHANNEL);
+    assetChannel.addEventListener('message', event => {
+      const message = event.data;
+      if (!message || message.type !== 'stone-skip-assets-request' || message.sourceId === stoneSkipAssetSourceId) return;
+      if (message.action === 'save' && message.patch) {
+        applyAssetPatch(message.patch, { persist: true });
+      } else if (message.action === 'apply' && message.patch) {
+        applyAssetPatch(message.patch);
+      } else if (message.action === 'reset') {
+        resetAssets();
+      }
+      assetChannel.postMessage({
+        type: 'stone-skip-assets-response',
+        id: message.id,
+        sourceId: stoneSkipAssetSourceId,
+        isAssetEditorFrame,
+        assets: cloneAsset(assets),
+        defaults: cloneAsset(ASSET_PACK),
+        defaultShopFrameRaster: defaultShopFrameRaster(),
+      });
     });
-  });
-} catch {}
+  } catch {}
+}
 
 // Theme: real palette switch, not visual inversion.
 const THEME_KEY = 'stone-skipping-game-theme';
@@ -1487,6 +1497,7 @@ function upgradeAudioProfile(typeIndex = 0) {
 function playSkip(strength, skipN, profile = stoneAudioProfile()) {
   if (!audio) return;
   const { ctx, dry, reverbSend } = audio;
+  if (ctx.state !== 'running') { ctx.resume(); return; }
   const now = ctx.currentTime;
   const freq = transposed(SKIP_PITCHES[skipN % SKIP_PITCHES.length], profile.transpose);
 
@@ -1515,6 +1526,7 @@ function playSkip(strength, skipN, profile = stoneAudioProfile()) {
 function playSink() {
   if (!audio) return;
   const { ctx, dry, reverbSend } = audio;
+  if (ctx.state !== 'running') { ctx.resume(); return; }
   const now = ctx.currentTime;
 
   // Descending glide
@@ -1948,6 +1960,22 @@ class Drop {
 let drops = [];
 let winDrop = null;
 
+function emitSkipImpact({
+  x = stone.x,
+  y = stone.y,
+  born = t,
+  strength = 1,
+  skipN = stone.skipN,
+  decayD = DECAY_D,
+  splashR = stone.splashR,
+  profile = stoneAudioProfile(),
+} = {}) {
+  const drop = new Drop(x, y, born, strength, decayD, splashR);
+  drops.push(drop);
+  playSkip(strength, skipN, profile);
+  return drop;
+}
+
 // ── Fish ──────────────────────────────────────────────────────────────
 function randomFishSpawnGap() {
   return FISH_SPAWN_GAP_MIN + Math.random() * (FISH_SPAWN_GAP_MAX - FISH_SPAWN_GAP_MIN);
@@ -2127,10 +2155,33 @@ const CHALLENGE_TIERS = [
 let challengeTargets = [];
 let challengeHit = null;
 let challengeWon = false;
-let totalWins   = 0;
+const STARTING_PLOPS = 0; // Plops are session currency; purchased upgrade levels persist.
+let totalWins   = STARTING_PLOPS;
 let shopIndex   = 0;
 const shopLevels = Array(SHOP_STONES.length).fill(0);
 let pendingTriangleBonus = 0;
+let tutorialActive = false;
+
+const GAME_MODE = {
+  splash: 'splash',
+  lore: 'lore',
+  tutorial: 'tutorial',
+  playing: 'playing',
+  shop: 'shop',
+};
+let gameMode = GAME_MODE.splash;
+let previousGameMode = GAME_MODE.playing;
+
+function setGameMode(next) {
+  if (!Object.prototype.hasOwnProperty.call(GAME_MODE, next)) return;
+  if (next !== GAME_MODE.shop) previousGameMode = next;
+  gameMode = next;
+  tutorialActive = next === GAME_MODE.tutorial;
+}
+
+function isGameplayInputEnabled() {
+  return gameMode === GAME_MODE.playing;
+}
 
 function readShopLevels() {
   try {
@@ -2310,7 +2361,7 @@ function clampPullPoint(gx, gy) {
 $waves.addEventListener('mousedown', e => {
   initAudio();
   if (audio) audio.ctx.resume();
-  if (tutorialActive) return;
+  if (!isGameplayInputEnabled()) return;
   if (stone.state !== 'idle') return;
   e.preventDefault();
   const { gx, gy } = toGrid(e);
@@ -2385,7 +2436,7 @@ function releaseStone() {
 $waves.addEventListener('touchstart', e => {
   initAudio();
   if (audio) audio.ctx.resume();
-  if (tutorialActive) return;
+  if (!isGameplayInputEnabled()) return;
   if (stone.state !== 'idle') return;
   const { gx, gy } = toGrid(touchPos(e));
   const dx = gx - stone.x, dy = gy - stone.y;
@@ -2474,8 +2525,11 @@ function updateStone(dt) {
         stone.skipTimer = Math.max(0.07, 0.007 * spdNext);
         stone.flashT    = 0.12;
         const str = Math.max(0.35, 1 - stone.skipN * 0.06);
-        drops.push(new Drop(stone.x, stone.y, t, str, bounceDecayD, stone.splashR));
-        playSkip(str, stone.skipN - 1, stoneAudioProfile());
+        emitSkipImpact({
+          strength: str,
+          skipN: stone.skipN - 1,
+          decayD: bounceDecayD,
+        });
         if (stone.skipN > bestSkips) bestSkips = stone.skipN;
         updateScore();
 
@@ -2819,7 +2873,11 @@ function updateShop() {
   $shopStatus.textContent = '';
 }
 
-function openShop() {
+function openShop(options = {}) {
+  const force = options?.force === true;
+  if (!force && gameMode !== GAME_MODE.playing && gameMode !== GAME_MODE.shop) return;
+  if (gameMode !== GAME_MODE.shop) previousGameMode = gameMode;
+  setGameMode(GAME_MODE.shop);
   $shopModal.classList.add('open');
   $shopModal.setAttribute('aria-hidden', 'false');
   renderShopFrame();
@@ -2829,6 +2887,7 @@ function openShop() {
 function closeShop() {
   $shopModal.classList.remove('open');
   $shopModal.setAttribute('aria-hidden', 'true');
+  setGameMode(previousGameMode === GAME_MODE.shop ? GAME_MODE.playing : previousGameMode);
   $shopButton.blur();
 }
 
@@ -2860,14 +2919,13 @@ $shopUpgrade.addEventListener('click', () => {
 
 document.addEventListener('keydown', e => {
   const shopOpen = $shopModal.classList.contains('open');
-  const splashOpen = !!document.getElementById('splash');
   if (e.key === 'Escape' && shopOpen) {
     e.preventDefault();
     closeShop();
     return;
   }
-  if (splashOpen) return;
-  if (e.key.toLowerCase() === 's' && !shopOpen) {
+  if (gameMode === GAME_MODE.splash || gameMode === GAME_MODE.lore || gameMode === GAME_MODE.tutorial) return;
+  if (e.key.toLowerCase() === 's' && gameMode === GAME_MODE.playing) {
     e.preventDefault();
     openShop();
     return;
@@ -3328,6 +3386,7 @@ let t = 0;
 let lastFrameTs = null;
 
 function frame(ts) {
+  if (audio && audio.ctx.state !== 'running') audio.ctx.resume();
   const realDt = lastFrameTs === null ? DT : Math.min((ts - lastFrameTs) / 1000, 0.1);
   lastFrameTs = ts;
   t += realDt;
@@ -3363,12 +3422,17 @@ readShopLevels();
 spawnStone();
 updateScore();
 updateChallenge();
-if (new URLSearchParams(location.search).has('shop')) requestAnimationFrame(openShop);
+if (URL_PARAMS.has('shop')) requestAnimationFrame(() => openShop({ force: true }));
 let relayoutTimer = null;
 let lastLayoutKey = `${COLS}x${ROWS}:${ORIENTATION}`;
 function relayoutGame() {
   initLayout();
   const layoutKey = `${COLS}x${ROWS}:${ORIENTATION}`;
+  if (gameMode === GAME_MODE.tutorial) {
+    renderShopFrame();
+    updateChallenge();
+    return;
+  }
   if (layoutKey === lastLayoutKey) {
     renderShopFrame();
     updateChallenge();
@@ -3397,9 +3461,15 @@ window.addEventListener('orientationchange', scheduleRelayout);
 window.visualViewport?.addEventListener('resize', scheduleRelayout);
 function startGame() { requestAnimationFrame(frame); }
 
-let tutorialActive = false;
+let tutorialCleanup = null;
+function clearTutorialArtifacts() {
+  if (!tutorialCleanup) return;
+  tutorialCleanup();
+  tutorialCleanup = null;
+}
 
 function showLoreScreen() {
+  setGameMode(GAME_MODE.lore);
   const screen = document.createElement('div');
   screen.id = 'lore-screen';
   const LORE = [
@@ -3432,6 +3502,8 @@ function showLoreScreen() {
     const go = () => {
       document.removeEventListener('keydown', go);
       document.removeEventListener('click', go);
+      initAudio();
+      if (audio) audio.ctx.resume();
       screen.style.transition = 'opacity .4s ease';
       screen.style.opacity = '0';
       setTimeout(() => {
@@ -3446,17 +3518,50 @@ function showLoreScreen() {
 }
 
 function startTutorial() {
-  tutorialActive = true;
+  clearTutorialArtifacts();
+  setGameMode(GAME_MODE.tutorial);
   const $ch = document.getElementById('challenge');
+  const timers = new Set();
+  const intervals = new Set();
+  let pullRaf = 0;
+  const wait = (fn, delay) => {
+    const id = setTimeout(() => {
+      timers.delete(id);
+      fn();
+    }, delay);
+    timers.add(id);
+    return id;
+  };
+  const every = (fn, delay) => {
+    const id = setInterval(fn, delay);
+    intervals.add(id);
+    return id;
+  };
+  const clearEvery = id => {
+    clearInterval(id);
+    intervals.delete(id);
+  };
 
   const tip = document.createElement('div');
   tip.id = 'tut-tip';
   tip.style.whiteSpace = 'pre-line';
   document.body.appendChild(tip);
+  tutorialCleanup = () => {
+    timers.forEach(id => clearTimeout(id));
+    intervals.forEach(id => clearInterval(id));
+    timers.clear();
+    intervals.clear();
+    if (pullRaf) cancelAnimationFrame(pullRaf);
+    pullRaf = 0;
+    $ch.classList.remove('tut-highlight');
+    tip.remove();
+    document.querySelectorAll('#tut-score-flash').forEach(el => el.remove());
+    if (gameMode === GAME_MODE.tutorial) setGameMode(GAME_MODE.playing);
+  };
 
   function showTip(text) {
     tip.classList.remove('on');
-    setTimeout(() => { tip.textContent = text; tip.classList.add('on'); }, 220);
+    wait(() => { tip.textContent = text; tip.classList.add('on'); }, 220);
   }
   function hideTip() { tip.classList.remove('on'); }
 
@@ -3466,29 +3571,32 @@ function startTutorial() {
     f.textContent = text;
     f.style.animation = 'tutScoreFlash 1.5s ease forwards';
     document.body.appendChild(f);
-    setTimeout(() => f.remove(), 1600);
+    wait(() => f.remove(), 1600);
   }
 
   function endTutorial(delay) {
-    setTimeout(() => {
+    wait(() => {
       $ch.classList.remove('tut-highlight');
       showTip('Collect plops\nbuy upgrades in the shop\nGood luck!');
-      setTimeout(() => {
+      wait(() => {
         tip.style.transition = 'opacity .8s ease';
         tip.style.opacity = '0';
-        setTimeout(() => { tip.remove(); tutorialActive = false; }, 900);
+        wait(() => {
+          clearTutorialArtifacts();
+          setGameMode(GAME_MODE.playing);
+        }, 900);
       }, 3500);
     }, delay);
   }
 
   // Step 1: highlight challenge targets + explain
-  setTimeout(() => {
+  wait(() => {
     $ch.classList.add('tut-highlight');
     showTip('Hit any of these numbers\nwith your stone');
   }, 800);
 
   // Step 2: scripted demo throw — guaranteed win
-  setTimeout(() => {
+  wait(() => {
     hideTip();
 
     // Use predictedSkipCountFromPull to guarantee target match
@@ -3513,8 +3621,8 @@ function startTutorial() {
       const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
       stone.x = spX + (pullTargetX - spX) * ease;
       stone.y = spY;
-      if (t < 1) { requestAnimationFrame(animatePull); }
-      else { setTimeout(launch, 450); }
+      if (t < 1) { pullRaf = requestAnimationFrame(animatePull); }
+      else { wait(launch, 450); }
     }
 
     function launch() {
@@ -3529,16 +3637,16 @@ function startTutorial() {
       showTip('skip across the water\nand hit the target');
 
       let resultChecked = false;
-      const poll = setInterval(() => {
+      const poll = every(() => {
         if (!resultChecked && stone.state === 'sinking') {
           resultChecked = true;
-          clearInterval(poll);
+          clearEvery(poll);
           const won = challengeWon, hit = challengeHit;
           hideTip();
           if (won && hit) {
             const hitTier = CHALLENGE_TIERS.find(x => x.key === challengeTargets[hit.index]?.key);
             const r = hitTier ? hitTier.reward : 1;
-            setTimeout(() => {
+            wait(() => {
               showScoreFlash(`+${r} plop${r !== 1 ? 's' : ''}!`);
               endTutorial(1700);
             }, 350);
@@ -3550,7 +3658,7 @@ function startTutorial() {
     }
 
     showTip('watch how to throw...');
-    requestAnimationFrame(animatePull);
+    pullRaf = requestAnimationFrame(animatePull);
   }, 3800);
 }
 
@@ -4017,8 +4125,6 @@ document.addEventListener('DOMContentLoaded', function() {
       st.y += st.vy * dt;
       st.skipTimer -= dt;
       if (st.skipTimer <= 0) {
-        addSplashDrop(st.x, st.y, simT, st.skipN);
-        st.skipN++;
         const spd = Math.sqrt(st.vx * st.vx + st.vy * st.vy);
         const effVxDamp = VX_DAMP * 1.02;
         const spdNext = spd * effVxDamp;
@@ -4026,6 +4132,8 @@ document.addEventListener('DOMContentLoaded', function() {
         st.vy = (st.vy / spd) * spdNext;
         st.skipSpacing = Math.min(3.8, Math.max(1.9, st.skipSpacing * 1.08));
         st.skipTimer = Math.max(0.07, 0.007 * spdNext * st.skipSpacing);
+        addSplashDrop(st.x, st.y, simT, st.skipN);
+        st.skipN++;
       }
     }
 
