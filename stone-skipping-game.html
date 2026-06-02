@@ -4445,13 +4445,15 @@ document.addEventListener('DOMContentLoaded', function() {
     let spLastBorn = 0;
     const spMinEnd = 7.0;
     const spMaxEnd = 10.5;
+    const SP_AUDIO_LEAD = 0.045;
 
     function addSplashDrop(x, y, born, skipN) {
-      spLastBorn = Math.max(spLastBorn, born);
+      const visualBorn = born + SP_AUDIO_LEAD;
+      spLastBorn = Math.max(spLastBorn, visualBorn);
       spDrops.push({
       x,
       y,
-      born,
+      born:    visualBorn,
       life:    20,
       str:     Math.max(1.02, 1.70 - skipN * 0.018),
       decayD:  SP_DECAY_D * 0.40,
