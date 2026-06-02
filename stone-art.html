@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stone Skipping</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box }
+html, body { width:100%; height:100%; background:#000; overflow:hidden }
+#waves {
+  font-family:'Courier New',Courier,monospace;
+  font-size:14px; font-weight:500; line-height:1.18;
+  white-space:pre; position:fixed; top:0; left:0;
+  color:#777; text-shadow:.35px 0 currentColor;
+  pointer-events:none;
+}
+#sl { position:fixed; top:0; left:0; pointer-events:none }
+.s {
+  font-family:'Courier New',Courier,monospace;
+  font-size:14px; font-weight:500; line-height:1.18;
+  position:absolute; text-shadow:.35px 0 currentColor;
+}
+#hint {
+  position:fixed; bottom:18px; right:22px;
+  font-family:'Courier New',Courier,monospace;
+  font-size:11px; color:#333; pointer-events:none;
+  transition: opacity 1.2s ease;
+}
+</style>
+</head>
+<body>
+<pre id="waves"></pre>
+<div id="sl"></div>
+<div id="hint">· click for sound ·</div>
+<script>
+// ── Wave constants — verbatim from Stone Skipping Game ────────────────
+const SPEED = 9, WAVELENGTH = 7.5, DECAY_T = 0.22, DECAY_D = 0.045;
+const CREST_T = 0.80, FADE_LOW = 0.08, FADE_ZERO = 0.004;
+
+// ── Stone physics — from Stone Skipping Game ──────────────────────────
+const VX_DAMP = 0.92, MIN_SPD = 7.0, MAX_PULL = 14, POWER = 4.2;
+const CURVE_PER_SKIP = 0.04;
+
+// Stone audio profiles — verbatim from game
+const AUDIO_PROFILES = [
+  { transpose: -7, thud: 1.28, ping: 0.84, decay: 1.18, wave: 'sine'     },
+  { transpose:  0, thud: 0.86, ping: 1.03, decay: 0.92, wave: 'sine'     },
+  { transpose: -3, thud: 1.36, ping: 0.66, decay: 0.68, wave: 'triangle' },
+  { transpose:  7, thud: 0.62, ping: 1.05, decay: 0.58, wave: 'triangle' },
+  { transpose:  4, thud: 0.72, ping: 0.92, decay: 0.50, wave: 'triangle' },
+  { transpose:  2, thud: 0.74, ping: 1.00, decay: 1.08, wave: 'sine'     },
+];
+const SKIP_PITCHES = [440, 554, 622, 740, 831, 880, 1047, 880, 740, 622];
+
+const N_STONES = 4;
+const MAX_DROPS = 56;
+const WAVE_FRAME_MS = 1000 / 30;
+const OFF_MARGIN = 40;   // cols/rows past edge before stone dies
+
+// ── Layout ────────────────────────────────────────────────────────────
+let CW, CH, COLS, ROWS;
+function initLayout() {
+  const p = document.createElement('span');
+  p.style.cssText = "position:fixed;visibility:hidden;font-family:'Courier New',monospace;font-size:14px;font-weight:500;white-space:pre";
+  p.textContent = 'M'.repeat(200);
+  document.body.appendChild(p);
+  CW = p.getBoundingClientRect().width / 200;
+  document.body.removeChild(p);
+  CH = 14 * 1.18;
+  COLS = Math.floor(window.innerWidth  / CW);
+  ROWS = Math.floor(window.innerHeight / CH);
+}
+
+// ── Audio — verbatim from Stone Skipping Game ─────────────────────────
+let audio = null;
+
+function initAudio() {
+  if (audio) return;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  const dry = ctx.createGain();
+  dry.gain.value = 0.5;
+  dry.connect(ctx.destination);
+
+  const reverbSend = ctx.createGain();
+  reverbSend.gain.value = 0.7;
+
+  // Synthetic 4-sec cave-like impulse response
+  const irLen = ctx.sampleRate * 4;
+  const ir = ctx.createBuffer(2, irLen, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    for (let i = 0; i < irLen; i++)
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 1.6);
+  }
+  const conv = ctx.createConvolver();
+  conv.buffer = ir;
+  const wetOut = ctx.createGain();
+  wetOut.gain.value = 0.42;
+  reverbSend.connect(conv);
+  conv.connect(wetOut);
+  wetOut.connect(ctx.destination);
+
+  // Sub drone — 42/55/82.5/110 Hz
+  const droneOut = ctx.createGain();
+  droneOut.gain.value = 0;
+  droneOut.connect(dry);
+  droneOut.connect(reverbSend);
+  [[42, 0.045], [55, 0.035], [55.3, 0.022], [82.5, 0.018], [84, 0.014], [110, 0.010]].forEach(([f, v]) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = f; g.gain.value = v;
+    if (f === 84) o.detune.value = -7;
+    o.connect(g); g.connect(droneOut); o.start();
+  });
+  droneOut.gain.setTargetAtTime(0.32, ctx.currentTime + 0.2, 4.0);
+
+  // Cave ambient rumble
+  const noiseLen = ctx.sampleRate * 4;
+  const caveBuf = ctx.createBuffer(1, noiseLen, ctx.sampleRate);
+  const caveNd = caveBuf.getChannelData(0);
+  let cv = 0;
+  for (let i = 0; i < noiseLen; i++) cv = caveNd[i] = (cv + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+  const caveSrc = ctx.createBufferSource();
+  caveSrc.buffer = caveBuf; caveSrc.loop = true;
+  const caveFilter = ctx.createBiquadFilter();
+  caveFilter.type = 'bandpass'; caveFilter.frequency.value = 260; caveFilter.Q.value = 0.7;
+  const caveGain = ctx.createGain();
+  caveGain.gain.value = 0;
+  caveSrc.connect(caveFilter); caveFilter.connect(caveGain);
+  caveGain.connect(dry); caveGain.connect(reverbSend);
+  caveSrc.start();
+  caveGain.gain.setTargetAtTime(0.28, ctx.currentTime + 0.5, 3.5);
+  const caveLfo = ctx.createOscillator(), caveLfoGain = ctx.createGain();
+  caveLfo.frequency.value = 0.15; caveLfoGain.gain.value = 80;
+  caveLfo.connect(caveLfoGain); caveLfoGain.connect(caveFilter.frequency); caveLfo.start();
+
+  audio = { ctx, dry, reverbSend };
+}
+
+function transposed(freq, semitones) {
+  return freq * Math.pow(2, semitones / 12);
+}
+
+function playSkip(strength, skipN, profile) {
+  if (!audio) return;
+  const { ctx, dry, reverbSend } = audio;
+  if (ctx.state !== 'running') { ctx.resume(); return; }
+  const now = ctx.currentTime;
+  const freq = transposed(SKIP_PITCHES[skipN % SKIP_PITCHES.length], profile.transpose);
+
+  const osc = ctx.createOscillator(), env = ctx.createGain();
+  osc.type = 'sine'; osc.frequency.value = freq;
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(0.091 * strength * 0.7, now + 0.003);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+  osc.connect(env); env.connect(dry); env.connect(reverbSend);
+  osc.start(now); osc.stop(now + 0.7);
+
+  // Sub thud
+  const thud = ctx.createOscillator(), tEnv = ctx.createGain();
+  thud.type = 'sine';
+  thud.frequency.setValueAtTime(110 * strength, now);
+  thud.frequency.exponentialRampToValueAtTime(38, now + 0.09);
+  tEnv.gain.setValueAtTime(0.14 * strength * 0.6, now);
+  tEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+  thud.connect(tEnv); tEnv.connect(dry);
+  thud.start(now); thud.stop(now + 0.12);
+}
+
+function playSink() {
+  if (!audio) return;
+  const { ctx, dry, reverbSend } = audio;
+  if (ctx.state !== 'running') { ctx.resume(); return; }
+  const now = ctx.currentTime;
+
+  const osc = ctx.createOscillator(), env = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(310, now);
+  osc.frequency.exponentialRampToValueAtTime(52, now + 1.1);
+  env.gain.setValueAtTime(0.08, now);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+  osc.connect(env); env.connect(dry); env.connect(reverbSend);
+  osc.start(now); osc.stop(now + 1.2);
+
+  for (let i = 0; i < 7; i++) {
+    const bt = now + i * 0.055 + Math.random() * 0.025;
+    const b = ctx.createOscillator(), bg = ctx.createGain();
+    b.type = 'sine'; b.frequency.value = 450 + Math.random() * 800;
+    bg.gain.setValueAtTime(0.03, bt);
+    bg.gain.exponentialRampToValueAtTime(0.001, bt + 0.09);
+    b.connect(bg); bg.connect(reverbSend);
+    b.start(bt); b.stop(bt + 0.12);
+  }
+}
+
+// ── Drop system ───────────────────────────────────────────────────────
+class Drop {
+  constructor(x, y, born, str = 1, decayD = DECAY_D, splashR = 0.38) {
+    this.x = x; this.y = y; this.born = born;
+    this.life = 3.9 + Math.random() * 1.1;
+    this.str = str; this.decayD = decayD; this.splashR = splashR;
+    this.seed = Math.random() * Math.PI * 2;
+  }
+}
+let drops = [];
+
+function waveComp(d, px, py, now) {
+  const age = now - d.born;
+  if (age < 0) return null;
+  const dx = px - d.x, dy = (py - d.y) * 2;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 0.5 || age < dist / SPEED) return null;
+  const ang = Math.atan2(dy, dx);
+  const wob = Math.sin(ang * 2 + d.seed) * 0.7 + Math.sin(ang * 3.1 + d.seed * 1.5) * 0.4;
+  const dw  = dist + wob * Math.exp(-dist * 0.05) * 2.2;
+  const ph  = (dw - SPEED * age) * (2 * Math.PI / WAVELENGTH);
+  const sv  = Math.sin(ph);
+  const ev  = Math.exp(-age * DECAY_T) * Math.exp(-dist * d.decayD) * d.str;
+  return { sv, ev, dx: px - d.x, dy: py - d.y };
+}
+
+function ringChar(dxR, dyR, env, x, y) {
+  let tang = (Math.atan2(-dyR, dxR) * 180 / Math.PI + 360) % 180;
+  if (tang > 90) tang = 180 - tang;
+  const nx = (((x * 127 + y * 311) ^ (x * 53 + y * 19)) & 0xFF) / 255;
+  const h = ((x * 374761393 + y * 668265263) & 0x7FFFFFFF) % 1000;
+  if (env > 0.46 && h < 12) return h < 4 ? '.' : h < 8 ? '\u00B7' : ':';
+  if (env < 0.11 + nx * 0.07) return '\u02D9';
+  if (env < 0.20 + nx * 0.08) return '\u00B7';
+  if (tang < 30) return (env > 0.37 - nx * 0.06) ? (nx < 0.52 ? '~' : '-') : (nx < 0.58 ? '\u00B7' : '\u02D9');
+  return nx < 0.62 ? '\u00B7' : '\u02D9';
+}
+
+function renderWaves() {
+  const ct = Math.min(0.93, CREST_T + drops.length * 0.008);
+  const rows = [];
+  for (let y = 0; y < ROWS; y++) {
+    let row = '';
+    for (let x = 0; x < COLS; x++) {
+      let bW = 0, bDx = 0, bDy = 0, bAge = 0, bLife = 1;
+      for (const d of drops) {
+        const c = waveComp(d, x, y, t);
+        if (!c || c.sv <= ct) continue;
+        const w = c.sv * c.ev;
+        if (w > bW) { bW = w; bDx = c.dx; bDy = c.dy; bAge = Math.max(0, t - d.born); bLife = d.life; }
+      }
+      if (bW > 0) bW *= 0.80 + (((x * 127 + y * 311) ^ (x * 53 + y * 19)) & 0xFF) / 255 * 0.40;
+      const fa = Math.max(0, Math.min(1, bAge / bLife));
+      const ae = fa < 0.62 ? 1 : Math.max(0, (1 - fa) / 0.38) ** 2.2;
+      bW *= ae;
+      if (bW >= FADE_LOW) {
+        const tf = Math.max(0, (1 - fa) / 0.34);
+        const keep = fa < 0.72 ? Math.max(0.05, 1 - fa ** 1.35) : 0.01 + 0.08 * tf * tf;
+        const h = ((x * 374761393 + y * 668265263) & 0x7FFFFFFF) % 1000;
+        row += h < keep * 1000 ? ringChar(bDx, bDy, bW, x, y) : ' ';
+      } else if (bW >= FADE_ZERO) {
+        const p = ((bW - FADE_ZERO) / (FADE_LOW - FADE_ZERO)) ** 3;
+        const h = ((x * 374761393 + y * 668265263) & 0x7FFFFFFF) % 1000;
+        row += h < p * Math.max(0.04, ae) * 1000 ? '\u02D9' : ' ';
+      } else {
+        let ch = ' ';
+        for (const d of drops) {
+          const a2 = t - d.born;
+          if (a2 < 0 || a2 > 0.35) continue;
+          const r2 = Math.sqrt((x - d.x) ** 2 + ((y - d.y) * 2) ** 2);
+          const sr = d.splashR;
+          if      (r2 < 0.8 * sr && a2 < 0.09) { ch = 'o'; break; }
+          else if (r2 < 1.6 * sr && a2 < 0.18) { ch = '.'; break; }
+          else if (r2 < 2.8 * sr && a2 < 0.28) { ch = ':'; break; }
+          else if (r2 < 3.5 * sr && a2 < 0.35) { ch = '\u00B7'; break; }
+        }
+        row += ch;
+      }
+    }
+    rows.push(row);
+  }
+  document.getElementById('waves').textContent = rows.join('\n');
+}
+
+// ── Stones ────────────────────────────────────────────────────────────
+const STONE_TYPES = [
+  { char: '⬤', hollow: '◯', splashR: 0.78, damp: 1.055 },
+  { char: '●', hollow: '○', splashR: 0.54, damp: 1.065 },
+];
+const SKIP_STYLES = [
+  { name: 'long',  weight: 0.48, speedMin: 68, speedRand: 38, timerMin: 0.22, timerK: 0.0095, splash: 1.12, decay: 0.92, str: 1.18, damp: 1.00 },
+  { name: 'short', weight: 0.52, speedMin: 36, speedRand: 28, timerMin: 0.09, timerK: 0.0042, splash: 0.70, decay: 1.85, str: 0.82, damp: 0.965 },
+];
+const PALETTE = ['#dcdcdc', '#cfcfcf', '#bfbfbf', '#e6e0cf', '#cbd5c8'];
+let stones = [], stoneEls = [];
+const $sl = document.getElementById('sl');
+
+function mkEl() {
+  const el = document.createElement('span');
+  el.className = 's';
+  $sl.appendChild(el);
+  return el;
+}
+
+function pickSkipStyle() {
+  const r = Math.random();
+  let acc = 0;
+  for (const style of SKIP_STYLES) {
+    acc += style.weight;
+    if (r <= acc) return style;
+  }
+  return SKIP_STYLES[SKIP_STYLES.length - 1];
+}
+
+function skipDelay(style, speed) {
+  return Math.max(style.timerMin, style.timerK * speed);
+}
+
+function spawn() {
+  const side = Math.floor(Math.random() * 4);
+
+  const style = pickSkipStyle();
+  const spd  = style.speedMin + Math.random() * style.speedRand;
+
+  // Angle: aimed roughly at the opposite side with ±25° spread
+  const spread = Math.PI * 0.28;
+  const baseA  = [0, Math.PI, Math.PI * 0.5, -Math.PI * 0.5][side];
+  const a      = baseA + (Math.random() - 0.5) * spread;
+  const vx = Math.cos(a) * spd;
+  const vy = Math.sin(a) * spd * 0.5;   // compensate char aspect ratio
+
+  let x, y;
+  if      (side === 0) { x = 1;        y = 2 + Math.random() * (ROWS - 4); }
+  else if (side === 1) { x = COLS - 2; y = 2 + Math.random() * (ROWS - 4); }
+  else if (side === 2) { x = 2 + Math.random() * (COLS - 4); y = 1; }
+  else                 { x = 2 + Math.random() * (COLS - 4); y = ROWS - 2; }
+
+  const profileIdx = Math.floor(Math.random() * AUDIO_PROFILES.length);
+  const type = STONE_TYPES[Math.floor(Math.random() * STONE_TYPES.length)];
+
+  return {
+    x, y, vx, vy,
+    style,
+    state: 'flying',
+    skipN: 0, sinkT: 0, deadT: 0, flashT: 0,
+    skipTimer: skipDelay(style, spd),
+    curveDir:  Math.random() < 0.5 ? 1 : -1,
+    char:    type.char,
+    hollow:  type.hollow,
+    color:   PALETTE[Math.floor(Math.random() * PALETTE.length)],
+    splashR: type.splashR * style.splash * (0.92 + Math.random() * 0.20),
+    damp:    type.damp * style.damp * (0.985 + Math.random() * 0.025),
+    profile: AUDIO_PROFILES[profileIdx],
+    respawnDelay: 1.2 + Math.random() * 2.0,
+  };
+}
+
+function isOffScreen(s) {
+  return s.x < -OFF_MARGIN || s.x > COLS + OFF_MARGIN
+      || s.y < -OFF_MARGIN || s.y > ROWS + OFF_MARGIN;
+}
+
+function tickStone(s, dt) {
+  if (s.state === 'sinking') {
+    s.sinkT += dt;
+    if (s.sinkT > 0.75) { s.state = 'dead'; }
+    return false;
+  }
+  if (s.state === 'dead') {
+    s.deadT += dt;
+    return s.deadT > s.respawnDelay;
+  }
+  // flying
+  s.flashT    = Math.max(0, s.flashT    - dt);
+  s.skipTimer = Math.max(0, s.skipTimer - dt);
+  s.x += s.vx * dt;
+  s.y += s.vy * dt;
+
+  // Off screen → die quietly (no sink drop)
+  if (isOffScreen(s)) { s.state = 'dead'; s.deadT = 0; return false; }
+
+  if (s.skipTimer <= 0) {
+    const spd  = Math.sqrt(s.vx * s.vx + s.vy * s.vy);
+    const eff  = VX_DAMP * s.damp;
+    const next = spd * eff;
+    const eR   = Math.min(1, spd / (MAX_PULL * POWER));
+    const ang  = CURVE_PER_SKIP * s.curveDir * (1 - eR);
+    const cos  = Math.cos(ang), sin = Math.sin(ang);
+    const nvx  = (cos * s.vx - sin * s.vy) / spd * next;
+    const nvy  = (sin * s.vx + cos * s.vy) / spd * next;
+
+    if (next < MIN_SPD) {
+      s.vx = s.vy = 0; s.state = 'sinking';
+      drops.push(new Drop(s.x, s.y, t, 0.9, DECAY_D * 0.65, s.splashR * 1.2));
+      if (drops.length > MAX_DROPS) drops.splice(0, drops.length - MAX_DROPS);
+      playSink();
+    } else {
+      s.vx = nvx; s.vy = nvy; s.skipN++;
+      s.skipTimer = skipDelay(s.style, next);
+      s.flashT    = 0.18;
+      const str = Math.max(0.38, s.style.str - s.skipN * 0.03);
+      drops.push(new Drop(s.x, s.y, t, str, DECAY_D * (s.style.decay + 2.4 * (1 - eR)), s.splashR));
+      if (drops.length > MAX_DROPS) drops.splice(0, drops.length - MAX_DROPS);
+      playSkip(str, s.skipN - 1, s.profile);
+    }
+  }
+  return false;
+}
+
+function renderStones() {
+  while (stoneEls.length < N_STONES) stoneEls.push(mkEl());
+  for (let i = 0; i < N_STONES; i++) {
+    const s = stones[i]; const el = stoneEls[i];
+    const hidden = !s
+      || s.state === 'dead'
+      || (s.state === 'sinking' && s.sinkT > 0.34)
+      || s.x < 0 || s.x >= COLS || s.y < 0 || s.y >= ROWS;
+    if (hidden) { el.textContent = ''; continue; }
+    const ch = s.state === 'sinking'
+      ? (s.sinkT < 0.18 ? s.char : s.sinkT < 0.34 ? s.hollow : '\u00B7')
+      : (s.flashT > 0.08 ? s.hollow : s.char);
+    el.style.left  = ((s.x | 0) * CW) + 'px';
+    el.style.top   = ((s.y | 0) * CH) + 'px';
+    el.style.color = s.color;
+    el.textContent = ch;
+  }
+}
+
+// ── Main loop ─────────────────────────────────────────────────────────
+let t = 0, lastTs = null, lastWaveRenderTs = -Infinity, lastAudioResumeTs = -Infinity;
+
+function frame(ts) {
+  resumeAudio(ts);
+  const dt = lastTs === null ? 1/60 : Math.min((ts - lastTs) / 1000, 0.1);
+  lastTs = ts;
+  t += dt;
+  drops = drops.filter(d => t - d.born < d.life);
+  for (let i = 0; i < N_STONES; i++) {
+    if (tickStone(stones[i], dt)) stones[i] = spawn();
+  }
+  if (ts - lastWaveRenderTs >= WAVE_FRAME_MS) {
+    renderWaves();
+    lastWaveRenderTs = ts;
+  }
+  renderStones();
+  requestAnimationFrame(frame);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+initLayout();
+
+// Stagger stones so they don't all launch at once
+for (let i = 0; i < N_STONES; i++) {
+  const s = spawn();
+  // Fast-forward each stone a bit into its path (no physics, just position)
+  const steps = i * 35;
+  for (let k = 0; k < steps; k++) { s.x += s.vx / 60; s.y += s.vy / 60; }
+  s.skipTimer = skipDelay(s.style, Math.sqrt(s.vx * s.vx + s.vy * s.vy));
+  stones.push(s);
+}
+
+// Start as an already-living field, not as a blank screen waiting for the first skip.
+for (let i = 0; i < 5; i++) {
+  drops.push(new Drop(
+    4 + Math.random() * Math.max(1, COLS - 8),
+    3 + Math.random() * Math.max(1, ROWS - 6),
+    -(0.45 + i * 0.55 + Math.random() * 0.25),
+    0.45 + Math.random() * 0.28,
+    DECAY_D * (0.9 + Math.random() * 0.8),
+    0.30 + Math.random() * 0.28
+  ));
+}
+
+requestAnimationFrame(frame);
+
+// Try to init audio immediately — browsers may allow it if user already interacted
+initAudio();
+
+// Unlock/resume on first interaction (required by browser autoplay policy)
+const $hint = document.getElementById('hint');
+function unlockAudio() {
+  if (!audio) initAudio();
+  if (audio && audio.ctx.state !== 'running') audio.ctx.resume();
+  lastAudioResumeTs = performance.now();
+  $hint.style.opacity = '0';
+  window.removeEventListener('click',     unlockAudio);
+  window.removeEventListener('keydown',   unlockAudio);
+  window.removeEventListener('touchstart', unlockAudio);
+}
+window.addEventListener('click',     unlockAudio);
+window.addEventListener('keydown',   unlockAudio);
+window.addEventListener('touchstart', unlockAudio);
+
+// Also resume proactively in the frame loop
+function resumeAudio(ts = performance.now()) {
+  if (!audio || audio.ctx.state === 'running') return;
+  if (ts - lastAudioResumeTs < 1000) return;
+  lastAudioResumeTs = ts;
+  audio.ctx.resume();
+}
+
+// Resize
+let rt;
+window.addEventListener('resize', () => {
+  clearTimeout(rt);
+  rt = setTimeout(() => { initLayout(); drops = []; }, 150);
+});
+</script>
+</body>
+</html>
