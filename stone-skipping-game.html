@@ -1802,8 +1802,7 @@ function playSkip(strength, skipN, profile = stoneAudioProfile()) {
   const osc = ctx.createOscillator();
   const env = ctx.createGain();
   osc.type = 'sine'; osc.frequency.value = freq;
-  env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(0.091 * strength, now + 0.003);
+  env.gain.setValueAtTime(0.091 * strength, now);
   env.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
   osc.connect(env); env.connect(dry); env.connect(reverbSend);
   osc.start(now); osc.stop(now + 0.7);
@@ -2120,6 +2119,7 @@ function updateWaveAudio() {
 // ── wave constants ───────────────────────────────────────────────────
 const SPEED = 9, WAVELENGTH = 7.5, DECAY_T = 0.22, DECAY_D = 0.045;
 const CREST_T = 0.80, FADE_LOW = 0.08, FADE_ZERO = 0.004;
+const AUDIO_IMPACT_LEAD = 0.028;
 
 // ── game constants ────────────────────────────────────────────────────
 const POWER = 4.2, VX_DAMP = 0.92;
@@ -2266,10 +2266,11 @@ function emitSkipImpact({
   decayD = DECAY_D,
   splashR = stone.splashR,
   profile = stoneAudioProfile(),
+  playAudio = true,
 } = {}) {
   const drop = new Drop(x, y, born, strength, decayD, splashR);
   drops.push(drop);
-  playSkip(strength, skipN, profile);
+  if (playAudio) playSkip(strength, skipN, profile);
   return drop;
 }
 
@@ -2621,6 +2622,7 @@ function spawnStone() {
   stone.splashR       = type.splashR;
   stone.state = 'idle';
   stone.skipN = stone.skipTimer = stone.sinkT = stone.deadT = stone.flashT = 0;
+  stone.skipSoundQueued = false;
   stone.curveDir = 1;
   stone.vx = stone.vy = 0;
   winDrop = null;
@@ -2791,6 +2793,13 @@ function updateStone(dt) {
     bounceStoneOffEdges();
     checkFishBonusHit();
 
+    if (!stone.skipSoundQueued && stone.skipTimer <= AUDIO_IMPACT_LEAD) {
+      const impactSkipN = stone.skipN;
+      const strength = Math.max(0.35, 1 - (impactSkipN + 1) * 0.06);
+      playSkip(strength, impactSkipN, stoneAudioProfile());
+      stone.skipSoundQueued = true;
+    }
+
     if (stone.skipTimer <= 0) {
       const spd          = Math.sqrt(stone.vx * stone.vx + stone.vy * stone.vy);
       const effVxDamp    = VX_DAMP * stone.vxDampMod;
@@ -2820,12 +2829,14 @@ function updateStone(dt) {
         stone.vy = (ndy / spd) * spdNext;
         stone.skipN++;
         stone.skipTimer = Math.max(0.07, 0.007 * spdNext);
+        stone.skipSoundQueued = false;
         stone.flashT    = 0.12;
         const str = Math.max(0.35, 1 - stone.skipN * 0.06);
         emitSkipImpact({
           strength: str,
           skipN: stone.skipN - 1,
           decayD: bounceDecayD,
+          playAudio: false,
         });
         if (stone.skipN > bestSkips) bestSkips = stone.skipN;
         updateScore();
@@ -3219,6 +3230,11 @@ function updateShop() {
   $shopStatus.textContent = '';
 }
 
+function warmShopAudio() {
+  initAudio();
+  if (audio && audio.ctx.state !== 'running') audio.ctx.resume();
+}
+
 function openShop(options = {}) {
   const force = options?.force === true;
   if (!force && gameMode !== GAME_MODE.playing && gameMode !== GAME_MODE.shop) return;
@@ -3246,14 +3262,14 @@ $shopButton.addEventListener('click', openShop);
 $shopClose.addEventListener('click', closeShop);
 $shopPrev.addEventListener('click', () => shiftShop(-1));
 $shopNext.addEventListener('click', () => shiftShop(1));
+$shopUpgrade.addEventListener('pointerdown', warmShopAudio);
 $shopUpgrade.addEventListener('click', () => {
   const item = SHOP_STONES[shopIndex];
   const level = shopLevels[shopIndex] || 0;
   if (level >= (item.maxLevel || 1)) return;
   const cost = item.costs?.[level] ?? item.cost ?? 0;
   if (totalWins >= cost) {
-    initAudio();
-    if (audio) audio.ctx.resume();
+    warmShopAudio();
     totalWins -= cost;
     shopLevels[shopIndex] = level + 1;
     writeShopLevels();
@@ -4427,8 +4443,9 @@ document.addEventListener('DOMContentLoaded', function() {
       vx: speed,
       vy: 0,
       delay: 0,
-      skipTimer: 0,
+      skipTimer: 0.16,
       skipN: 0,
+      skipSoundQueued: false,
       skipSpacing: 2.6,
       visibleUntil: 99,
       };
@@ -4445,22 +4462,19 @@ document.addEventListener('DOMContentLoaded', function() {
     let spLastBorn = 0;
     const spMinEnd = 7.0;
     const spMaxEnd = 10.5;
-    const SP_AUDIO_LEAD = 0.045;
 
     function addSplashDrop(x, y, born, skipN) {
-      const visualBorn = born + SP_AUDIO_LEAD;
-      spLastBorn = Math.max(spLastBorn, visualBorn);
+      spLastBorn = Math.max(spLastBorn, born);
       spDrops.push({
       x,
       y,
-      born:    visualBorn,
+      born,
       life:    20,
       str:     Math.max(1.02, 1.70 - skipN * 0.018),
       decayD:  SP_DECAY_D * 0.40,
       splashR: 1.62,
       seed:    skipN * 1.618,
       });
-      playSkip(Math.max(0.28, 0.92 - skipN * 0.07), skipN, STONE_AUDIO_FALLBACKS[1]);
     }
 
     function updateSplashStone(st, dt, simT) {
@@ -4472,6 +4486,10 @@ document.addEventListener('DOMContentLoaded', function() {
       st.x += st.vx * dt;
       st.y += st.vy * dt;
       st.skipTimer -= dt;
+      if (!st.skipSoundQueued && st.skipTimer <= AUDIO_IMPACT_LEAD) {
+        playSkip(Math.max(0.28, 0.92 - st.skipN * 0.07), st.skipN, STONE_AUDIO_FALLBACKS[1]);
+        st.skipSoundQueued = true;
+      }
       if (st.skipTimer <= 0) {
         const spd = Math.sqrt(st.vx * st.vx + st.vy * st.vy);
         const effVxDamp = VX_DAMP * 1.02;
@@ -4480,6 +4498,7 @@ document.addEventListener('DOMContentLoaded', function() {
         st.vy = (st.vy / spd) * spdNext;
         st.skipSpacing = Math.min(3.8, Math.max(1.9, st.skipSpacing * 1.08));
         st.skipTimer = Math.max(0.07, 0.007 * spdNext * st.skipSpacing);
+        st.skipSoundQueued = false;
         addSplashDrop(st.x, st.y, simT, st.skipN);
         st.skipN++;
       }
