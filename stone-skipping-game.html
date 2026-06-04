@@ -2205,11 +2205,11 @@ function updateChallenge() {
     .sort((a, b) => b.skipN - a.skipN)[0];
   const displayStone = leadStone || stone;
   const board = challengeTargets.map((item, index) => {
-    const hit = challengeHit && challengeHit.index === index ? ' hit' : '';
+    const hit = challengeHits[index] ? ' hit' : '';
     const reward = typeof stone !== 'undefined' ? adjustedReward(item.reward, displayStone) : item.reward;
     return `<span class="ch-card${hit}">[ ${item.value} ]<span class="ch-reward">+${reward}</span></span>`;
   }).join('');
-  if (challengeWon) {
+  if (challengeWon && !leadStone) {
     $challenge.innerHTML =
       `<span class="ch-hit">${assets.glyphs.icons.win}</span> <span class="ch-board">${board}</span>`;
     return;
@@ -2472,8 +2472,10 @@ const CHALLENGE_TIERS = [
 
 let challengeTargets = [];
 let challengeHit = null;
+let challengeHits = [];
 let challengeWon = false;
 let challengeWonT = null;
+let challengeTargetToken = 0;
 const STARTING_PLOPS = 0; // Plops are session currency; purchased upgrade levels persist.
 let totalWins   = STARTING_PLOPS;
 let shopIndex   = 0;
@@ -2503,17 +2505,12 @@ function isGameplayInputEnabled() {
 }
 
 function readShopLevels() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(SHOP_LEVELS_KEY) || '[]');
-    if (!Array.isArray(raw)) return;
-    raw.forEach((value, index) => {
-      shopLevels[index] = Math.max(0, Number(value) || 0);
-    });
-  } catch {}
+  shopLevels.fill(0);
+  try { localStorage.removeItem(SHOP_LEVELS_KEY); } catch {}
 }
 
 function writeShopLevels() {
-  try { localStorage.setItem(SHOP_LEVELS_KEY, JSON.stringify(shopLevels)); } catch {}
+  try { localStorage.removeItem(SHOP_LEVELS_KEY); } catch {}
 }
 
 function shopItemForType(typeIndex) {
@@ -2557,37 +2554,57 @@ function randomTargetForTier(tier, previous) {
   return value;
 }
 
+function makeChallengeTarget(tier, previous) {
+  return {
+    ...tier,
+    value: randomTargetForTier(tier, previous),
+    token: ++challengeTargetToken,
+  };
+}
+
+function currentChallengeTokens() {
+  return challengeTargets.map(target => target?.token ?? 0);
+}
+
+function syncChallengeWonState() {
+  challengeWon = challengeHits.some(Boolean);
+  challengeHit = [...challengeHits].reverse().find(Boolean) || null;
+  if (!challengeWon) challengeWonT = null;
+}
+
 function pickTarget(index = null) {
-  activeStones = [];
   if (index === null || challengeTargets.length !== CHALLENGE_TIERS.length) {
-    challengeTargets = CHALLENGE_TIERS.map(tier => ({
-      ...tier,
-      value: randomTargetForTier(tier),
-    }));
+    challengeTargets = CHALLENGE_TIERS.map(tier => makeChallengeTarget(tier));
+    challengeHits = Array(challengeTargets.length).fill(null);
+    challengeHit = null;
+    challengeWon = false;
+    challengeWonT = null;
   } else {
     const tier = CHALLENGE_TIERS[index];
     const previous = challengeTargets[index]?.value;
-    challengeTargets[index] = {
-      ...tier,
-      value: randomTargetForTier(tier, previous),
-    };
+    challengeTargets[index] = makeChallengeTarget(tier, previous);
+    challengeHits[index] = null;
+    syncChallengeWonState();
   }
-  challengeHit = null;
-  challengeWon = false;
-  challengeWonT = null;
 }
 
-function findChallengeTarget(skipN, tolerance = 0) {
+function findChallengeTarget(skipN, tolerance = 0, st = stone) {
   return challengeTargets
     .map((target, index) => ({ target, index, miss: Math.abs(target.value - skipN) }))
-    .filter(item => item.miss <= tolerance)
+    .filter(item => {
+      if (item.miss > tolerance) return false;
+      if (challengeHits[item.index]) return false;
+      return !st.targetTokens || st.targetTokens[item.index] === (item.target.token ?? 0);
+    })
     .sort((a, b) => a.miss - b.miss || b.target.reward - a.target.reward)[0] || null;
 }
 
 function awardChallenge(match, drop, st = stone) {
+  if (challengeHits[match.index]) return false;
   challengeHit = { ...match.target, index: match.index };
+  challengeHits[match.index] = challengeHit;
   challengeWon = true;
-  challengeWonT = 0;
+  if (challengeWonT === null) challengeWonT = 0;
   totalWins += adjustedReward(match.target.reward, st) * (st.bonusMultiplier || 1);
   if (match.miss) st.skipN = match.target.value;
   drop.isWin = true;
@@ -2598,6 +2615,8 @@ function awardChallenge(match, drop, st = stone) {
   }
   playWin();
   updateScore();
+  updateChallenge();
+  return true;
 }
 
 let bestSkips = 0;
@@ -2654,6 +2673,7 @@ function spawnStone() {
   stone.state = 'idle';
   stone.skipN = stone.skipTimer = stone.sinkT = stone.deadT = stone.flashT = 0;
   stone.skipSoundQueued = false;
+  stone.targetTokens = currentChallengeTokens();
   stone.curveDir = 1;
   stone.vx = stone.vy = 0;
   winDrop = null;
@@ -2680,6 +2700,7 @@ function cloneLaunchStone(source) {
     skipN: 0,
     skipTimer: source.skipTimer,
     curveDir: source.curveDir,
+    targetTokens: source.targetTokens ? [...source.targetTokens] : currentChallengeTokens(),
     sinkT: 0,
     deadT: 0,
     flashT: 0,
@@ -2695,11 +2716,11 @@ function trimActiveStones() {
 }
 
 function scheduleNextStone() {
-  if (gameMode !== GAME_MODE.playing || challengeWon) return;
+  if (gameMode !== GAME_MODE.playing) return;
   clearTimeout(nextStoneTimer);
   nextStoneTimer = setTimeout(() => {
     nextStoneTimer = null;
-    if (gameMode !== GAME_MODE.playing || challengeWon || grabbed) return;
+    if (gameMode !== GAME_MODE.playing || grabbed) return;
     spawnStone();
     $hint.style.opacity = '1';
   }, NEXT_STONE_DELAY_MS);
@@ -2768,7 +2789,6 @@ $waves.addEventListener('mousedown', e => {
   initAudio();
   if (audio) audio.ctx.resume();
   if (!isGameplayInputEnabled()) return;
-  if (challengeWon) return;
   if (stone.state !== 'idle') return;
   e.preventDefault();
   const { gx, gy } = toGrid(e);
@@ -2818,7 +2838,6 @@ $waves.addEventListener('touchstart', e => {
   initAudio();
   if (audio) audio.ctx.resume();
   if (!isGameplayInputEnabled()) return;
-  if (challengeWon) return;
   if (stone.state !== 'idle') return;
   const { gx, gy } = toGrid(touchPos(e));
   const dx = gx - stone.x, dy = gy - stone.y;
@@ -2898,9 +2917,9 @@ function updateActiveStone(st, dt) {
       const ndy = sin * st.vx + cos * st.vy;
 
       // One-skip forgiveness: a near miss can still land on one visible target.
-      const currentMatch = findChallengeTarget(st.skipN, currentLuckyTolerance(st));
+      const currentMatch = findChallengeTarget(st.skipN, currentLuckyTolerance(st), st);
 
-      if (!challengeWon && currentMatch && spdNext < MIN_SPD) {
+      if (currentMatch && spdNext < MIN_SPD) {
         st.vx = st.vy = 0;
         st.state = 'sinking';
         const sinkDrop = new Drop(st.x, st.y, t, 0.9, DECAY_D * 0.65, st.splashR * 1.2);
@@ -2929,13 +2948,13 @@ function updateActiveStone(st, dt) {
         updateScore();
 
         const hardStopLevel = st.typeIndex === 2 ? upgradeLevel(2) : 0;
-        const hardStopMatch = hardStopLevel ? findChallengeTarget(st.skipN) : null;
+        const hardStopMatch = hardStopLevel ? findChallengeTarget(st.skipN, 0, st) : null;
         const hardStopReady = hardStopMatch && (
           hardStopLevel >= 3
           || (hardStopLevel >= 2 && spdNext < MIN_SPD * 2.2)
           || spdNext < MIN_SPD * 1.4
         );
-        if (!challengeWon && hardStopReady) {
+        if (hardStopReady) {
           st.vx = st.vy = 0;
           st.state = 'sinking';
           const sinkDrop = new Drop(st.x, st.y, t, 1.05, DECAY_D * 0.55, st.splashR * 1.35);
@@ -2945,8 +2964,8 @@ function updateActiveStone(st, dt) {
           return;
         }
 
-        const nextMatch = findChallengeTarget(st.skipN + 1);
-        if (!challengeWon && spdNext < MIN_SPD && nextMatch) {
+        const nextMatch = findChallengeTarget(st.skipN + 1, 0, st);
+        if (spdNext < MIN_SPD && nextMatch) {
           // One-skip forgiveness: if a target is next, give exactly one more skip.
           const boost = (MIN_SPD * 0.98 / effVxDamp) / spdNext;
           st.vx *= boost; st.vy *= boost;
@@ -2957,8 +2976,8 @@ function updateActiveStone(st, dt) {
           const sinkDrop = new Drop(st.x, st.y, t, 0.9, DECAY_D * 0.65, st.splashR * 1.2);
           drops.push(sinkDrop);
           playSink(stoneAudioProfile(st.typeIndex));
-          const landedMatch = findChallengeTarget(st.skipN, currentLuckyTolerance(st));
-          if (landedMatch && !challengeWon) {
+          const landedMatch = findChallengeTarget(st.skipN, currentLuckyTolerance(st), st);
+          if (landedMatch) {
             awardChallenge(landedMatch, sinkDrop, st);
           }
         }
@@ -2974,18 +2993,20 @@ function updateActiveStone(st, dt) {
   }
 }
 
-function settleWonChallenge(dt) {
+function refreshHitChallenges(dt) {
   if (!challengeWon || challengeWonT === null) return;
   challengeWonT += dt;
   const resolveDelay = gameMode === GAME_MODE.tutorial ? 2.0 : 1.25;
   if (challengeWonT <= resolveDelay) return;
-  const hitIndex = challengeHit?.index;
-  activeStones = [];
-  grabbed = false;
-  $band.style.visibility = 'hidden';
-  if (hitIndex !== undefined) pickTarget(hitIndex);
-  spawnStone();
-  $hint.style.opacity = '1';
+  const hitIndexes = challengeHits
+    .map((hit, index) => hit ? index : -1)
+    .filter(index => index >= 0);
+  hitIndexes.forEach(index => pickTarget(index));
+  if (gameMode === GAME_MODE.tutorial && (stone.state === 'dead' || stone.state === 'sinking')) {
+    spawnStone();
+    $hint.style.opacity = '1';
+  }
+  if (stone.state === 'idle') stone.targetTokens = currentChallengeTokens();
   updateScore();
   updateChallenge();
 }
@@ -2995,11 +3016,9 @@ function updateStone(dt) {
     updateActiveStone(stone, dt);
   }
   for (const st of activeStones) updateActiveStone(st, dt);
-  activeStones = activeStones.filter(st => st.state !== 'dead' || st.deadT < 0.6 || challengeWon);
-  settleWonChallenge(dt);
-  if (!challengeWon) {
-    trimActiveStones();
-  }
+  activeStones = activeStones.filter(st => st.state !== 'dead' || st.deadT < 0.6);
+  refreshHitChallenges(dt);
+  trimActiveStones();
 }
 
 function updateScore() {
@@ -4075,7 +4094,9 @@ function startTutorial() {
         tip.style.opacity = '0';
         wait(() => {
           clearTutorialArtifacts();
+          if (stone.state !== 'idle') spawnStone();
           setGameMode(GAME_MODE.playing);
+          $hint.style.opacity = '1';
         }, 900);
       }, 3500);
     }, delay);
@@ -4122,6 +4143,7 @@ function startTutorial() {
       stone.vy = 0;
       stone.x  = spX; stone.y = spY;
       stone.state = 'flying';
+      stone.targetTokens = currentChallengeTokens();
       stone.skipTimer = Math.max(0.07, 0.007 * stone.vx);
       stone.curveDir = 0;
       playLaunch(0.7, stoneAudioProfile());
