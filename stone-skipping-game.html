@@ -37,6 +37,9 @@
   --shop-pad-x:56px;
   --shop-gap:38px;
   --shop-content-width:44ch;
+  --shop-content-y:0px;
+  --shop-frame-w:760px;
+  --shop-frame-h:600px;
   --splash-bg:#000;
   --splash-stage:#aaa;
   --splash-ring:#666;
@@ -70,6 +73,9 @@ body[data-theme="day"] {
   --shop-pad-x:56px;
   --shop-gap:38px;
   --shop-content-width:44ch;
+  --shop-content-y:0px;
+  --shop-frame-w:760px;
+  --shop-frame-h:600px;
   --splash-bg:#e8e8e8;
   --splash-stage:#555;
   --splash-ring:#747474;
@@ -235,14 +241,15 @@ body[data-theme="day"] #win-ring {
 #shop-modal {
   position:fixed; inset:0; z-index:180;
   display:none; place-items:center;
+  overflow:hidden;
   background:var(--bg); color:var(--shop-strong);
   font-family:'Courier New',monospace; font-size:14px; font-weight:500;
 }
 #shop-modal.open { display:grid }
 #shop-panel {
-  width:min(90vw, 760px);
-  height:min(82vh, 600px);
-  min-height:520px;
+  width:100vw;
+  height:100dvh;
+  min-height:0;
   overflow:hidden;
   display:grid;
   position:relative;
@@ -250,7 +257,12 @@ body[data-theme="day"] #win-ring {
   color:var(--shop-strong);
 }
 #shop-frame {
-  position:absolute; inset:0; z-index:0;
+  position:absolute; z-index:0;
+  left:50%; top:50%;
+  width:var(--shop-frame-w);
+  height:var(--shop-frame-h);
+  transform:translate(-50%, -50%) scale(var(--shop-scale, 1));
+  transform-origin:center center;
   color:var(--shop-frame);
   font-family:'Courier New',Courier,monospace;
   font-size:14px; font-weight:500; line-height:1.18;
@@ -258,11 +270,16 @@ body[data-theme="day"] #win-ring {
   text-shadow:.35px 0 currentColor;
 }
 #shop-panel > div {
-  position:relative; z-index:1;
-  height:100%;
+  position:absolute; z-index:1;
+  left:50%; top:50%;
+  width:var(--shop-frame-w);
+  height:var(--shop-frame-h);
+  transform:translate(-50%, -50%) scale(var(--shop-scale, 1));
+  transform-origin:center center;
   display:grid;
   place-items:center;
   padding:var(--shop-pad-y) var(--shop-pad-x);
+  box-sizing:border-box;
 }
 .shop-body {
   position:relative;
@@ -270,6 +287,7 @@ body[data-theme="day"] #win-ring {
   height:100%;
   display:grid;
   place-items:center;
+  transform:translateY(var(--shop-content-y));
 }
 .shop-center {
   display:grid;
@@ -3266,16 +3284,33 @@ function generatedShopStoneArt(item) {
 
 function renderShopFrame() {
   if (!$shopFrame || !$shopPanel) return;
+  const fitShopPanel = (panelW, panelH, maxW, maxH) => {
+    const scale = Math.min(
+      1,
+      Math.max(0.1, maxW) / Math.max(1, panelW),
+      Math.max(0.1, maxH) / Math.max(1, panelH)
+    );
+    $shopPanel.style.setProperty('--shop-scale', scale.toFixed(4));
+  };
+  const setShopCanvas = (panelW, panelH) => {
+    $shopPanel.style.setProperty('--shop-frame-w', `${panelW}px`);
+    $shopPanel.style.setProperty('--shop-frame-h', `${panelH}px`);
+    $shopPanel.style.width = '100vw';
+    $shopPanel.style.height = '100dvh';
+    $shopPanel.style.maxWidth = 'none';
+    $shopPanel.style.maxHeight = 'none';
+  };
   const setShopContentWidth = (cols) => {
     const contentCols = Math.max(30, Math.min(44, cols - 12));
     $shopPanel.style.setProperty('--shop-content-width', `${contentCols}ch`);
     $shopPanel.style.setProperty('--shop-content-cols', `${contentCols}`);
   };
+  $shopPanel.style.setProperty('--shop-scale', '1');
   const raster = assets.components.frames.shopRaster;
   const cw = CW || 8.4;
   const ch = CH || 16.52;
-  const maxPanelW = window.innerWidth * 0.88;
-  const maxPanelH = window.innerHeight * 0.78;
+  const maxPanelW = window.innerWidth * 0.96;
+  const maxPanelH = window.innerHeight * 0.96;
   const roomy = Math.max(0, Math.min(1, (maxPanelH - 430) / 180));
   const padY = Math.round(34 + roomy * 24);
   const padX = Math.round(36 + roomy * 20);
@@ -3283,34 +3318,34 @@ function renderShopFrame() {
   $shopPanel.style.setProperty('--shop-pad-y', `${padY}px`);
   $shopPanel.style.setProperty('--shop-pad-x', `${padX}px`);
   $shopPanel.style.setProperty('--shop-gap', `${gap}px`);
+  $shopPanel.style.setProperty('--shop-content-y', '0px');
   const useFixedRaster = ORIENTATION !== 'portrait' && raster && raster.trim();
   if (useFixedRaster) {
     const clean = raster.replace(/\r/g, '');
     const lines = clean.split('\n');
     const cols = Math.max(24, ...lines.map(line => line.length));
     const rows = Math.max(8, lines.length);
-    const fitsCurrentViewport = cols * cw <= maxPanelW && rows * ch <= maxPanelH;
-    if (!fitsCurrentViewport) {
+    if (cols * cw > maxPanelW) {
       const fitCols = Math.max(34, Math.min(cols, Math.floor(maxPanelW / cw)));
       const compressed = compressShopRasterColumns(clean, fitCols);
       const compLines = compressed.split('\n');
       const actualCols = Math.max(1, ...compLines.map(l => l.length));
+      const panelW = actualCols * cw;
+      const panelH = rows * ch;
       setShopContentWidth(actualCols);
-      $shopPanel.style.width = `${actualCols * cw}px`;
-      $shopPanel.style.height = `${rows * ch}px`;
-      $shopPanel.style.maxWidth = '88vw';
-      $shopPanel.style.maxHeight = '78vh';
+      setShopCanvas(panelW, panelH);
       $shopFrame.textContent = compressed;
       if ($shopArt && $shopArt.textContent) updateShop();
+      fitShopPanel(panelW, panelH, maxPanelW, maxPanelH);
       return;
     }
+    const panelW = cols * cw;
+    const panelH = rows * ch;
     setShopContentWidth(cols);
-    $shopPanel.style.width = `${cols * cw}px`;
-    $shopPanel.style.height = `${rows * ch}px`;
-    $shopPanel.style.maxWidth = '88vw';
-    $shopPanel.style.maxHeight = '78vh';
+    setShopCanvas(panelW, panelH);
     $shopFrame.textContent = clean;
     if ($shopArt && $shopArt.textContent) updateShop();
+    fitShopPanel(panelW, panelH, maxPanelW, maxPanelH);
     return;
   }
   $shopPanel.style.width = '';
@@ -3327,13 +3362,13 @@ function renderShopFrame() {
     : defaultShopFrameRaster(cols, rows);
   const frameLines = frameText.split('\n');
   const actualCols = Math.max(1, ...frameLines.map(line => line.length));
+  const panelW = actualCols * cw;
+  const panelH = rows * ch;
   setShopContentWidth(actualCols);
-  $shopPanel.style.width = `${actualCols * cw}px`;
-  $shopPanel.style.height = `${rows * ch}px`;
-  $shopPanel.style.maxWidth = '94vw';
-  $shopPanel.style.maxHeight = '84svh';
+  setShopCanvas(panelW, panelH);
   $shopFrame.textContent = frameText;
   if ($shopArt && $shopArt.textContent) updateShop();
+  fitShopPanel(panelW, panelH, maxPanelW, maxPanelH);
 }
 
 function updateShop() {
