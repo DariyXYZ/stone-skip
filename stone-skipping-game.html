@@ -226,9 +226,22 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
   line-height:1; cursor:pointer; padding:0;
 }
 .ascii-btn:hover { color:var(--shop-strong) }
+.ascii-btn.tut-shop-focus {
+  color:var(--win);
+  text-shadow:0 0 5px var(--win), 0 0 13px var(--win);
+  animation:tutShopGlow 1.05s ease-in-out infinite;
+}
+@keyframes tutShopGlow {
+  0%,100% { opacity:.74; filter:brightness(.9) }
+  50% { opacity:1; filter:brightness(1.45) }
+}
 body[data-theme="day"] .ascii-btn {
   font-weight:500;
   text-shadow:.35px 0 currentColor;
+}
+body[data-theme="day"] .ascii-btn.tut-shop-focus {
+  color:var(--win);
+  text-shadow:0 0 5px var(--win), 0 0 13px var(--win);
 }
 body[data-theme="day"] #waves,
 body[data-theme="day"] #win-ring {
@@ -1795,8 +1808,8 @@ const UPGRADE_MAGIC_BASE = {
   scale: [0, 3, 7, 10, 12, 15, 19, 22],
   wave: 'triangle',
   count: 4,
-  charge: 2.41,
-  finish: 3.17,
+  charge: 2.82,
+  finish: 3.58,
   noise: { type: 'lowpass', from: 110, peak: 600, end: 200, q: 10, gain: 0.10 },
   burst: { gain: 0.130, gap: 0.018, tail: 0.22, preRoll: 0.00 },
   reverse: { at: -2.60, tail: 2.14, gain: 1.00, from: 80, to: 3200 },
@@ -1908,7 +1921,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
   const stoneProfile = stoneAudioProfile(typeIndex);
   const magic = upgradeAudioProfile(typeIndex);
   const now = ctx.currentTime;
-  const audioShift = 0.24;
+  const audioShift = 0.10;
   const root = transposed(magic.root, magic.transpose + stoneProfile.transpose * magic.rootScale);
   const chargeEnd = now + magic.charge - audioShift;
   const finish = now + magic.finish - audioShift;
@@ -1985,7 +1998,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
 
   for (let i = 0; i < magic.count; i++) {
     const p = i / Math.max(1, magic.count - 1);
-    const t = now + Math.pow(p, 0.68) * (magic.charge - 0.46) + Math.random() * 0.045;
+    const t = now + Math.pow(p, 0.86) * (magic.charge - 0.62) + Math.random() * 0.035;
     const semi = scale[(i * 5 + typeIndex * 2 + Math.floor(p * 11)) % scale.length]
       + (p > 0.52 && Math.random() < 0.20 ? 12 : 0)
       + (p > 0.80 && Math.random() < 0.32 ? 12 : 0);
@@ -2069,14 +2082,14 @@ function playPurchaseMagic(typeIndex, level = 1) {
 
   // Buildup sparks: накопление энергии (редкие → плотные к dropStart)
   const fwSemis = [12, 15, 19, 22, 24, 27, 31, 34, 36, 39, 43];
-  const buildDur = chargeEnd - 0.18 - now;
-  for (let i = 0; i < 55; i++) {
-    const progress = Math.pow(Math.random(), 0.42);
+  const buildDur = chargeEnd - 0.22 - now;
+  for (let i = 0; i < 38; i++) {
+    const progress = Math.pow(Math.random(), 0.62);
     const ft = now + progress * buildDur;
     const semi = fwSemis[Math.floor(Math.random() * fwSemis.length)];
     const freq = transposed(root, semi);
-    const dur = 0.010 + Math.random() * 0.052;
-    const fg = (0.080 + Math.random() * 0.110) * (0.12 + progress * 0.88);
+    const dur = 0.018 + Math.random() * 0.056;
+    const fg = (0.052 + Math.random() * 0.082) * (0.10 + progress * 0.90);
     const fo = ctx.createOscillator();
     const fe = ctx.createGain();
     fo.type = 'sine';
@@ -2525,6 +2538,34 @@ let tutorialTargetFocusIndex = -1;
 let tutorialHitOnlyIndex = null;
 let tutorialTargetsMuted = false;
 
+function resetTutorialChallengeDisplay({ update = false } = {}) {
+  tutorialTargetFocusIndex = -1;
+  tutorialHitOnlyIndex = null;
+  tutorialTargetsMuted = false;
+  if (update && challengeTargets.length) updateChallenge();
+}
+
+function setTutorialTargetFocus(index, { update = true } = {}) {
+  tutorialHitOnlyIndex = null;
+  tutorialTargetsMuted = false;
+  tutorialTargetFocusIndex = index;
+  if (update) updateChallenge();
+}
+
+function setTutorialTargetsMuted(muted = true, { update = true } = {}) {
+  tutorialTargetFocusIndex = -1;
+  tutorialHitOnlyIndex = null;
+  tutorialTargetsMuted = muted;
+  if (update) updateChallenge();
+}
+
+function setTutorialHitOnly(index, { update = true } = {}) {
+  tutorialTargetFocusIndex = -1;
+  tutorialTargetsMuted = false;
+  tutorialHitOnlyIndex = index;
+  if (update) updateChallenge();
+}
+
 const GAME_MODE = {
   splash: 'splash',
   lore: 'lore',
@@ -2656,9 +2697,7 @@ function awardChallenge(match, drop, st = stone) {
     if (level > 0) pendingTriangleBonus = level + 1;
   }
   if (gameMode === GAME_MODE.tutorial) {
-    tutorialTargetFocusIndex = -1;
-    tutorialTargetsMuted = false;
-    tutorialHitOnlyIndex = match.index;
+    setTutorialHitOnly(match.index, { update: false });
   }
   playWin();
   updateScore();
@@ -2698,6 +2737,38 @@ function nextStoneTypeIndex() {
   return stoneTypeBag.pop();
 }
 
+function copyChallengeTokens(tokens = currentChallengeTokens()) {
+  return [...tokens];
+}
+
+function applyStoneType(st, typeIndex, bonusMultiplier = 0) {
+  const safeTypeIndex = STONE_TYPES[typeIndex] ? typeIndex : 1;
+  const type = STONE_TYPES[safeTypeIndex];
+  st.char = type.char;
+  st.hollow = type.hollow;
+  st.typeIndex = safeTypeIndex;
+  st.bonusMultiplier = bonusMultiplier;
+  st.powerMod = type.power;
+  st.vxDampMod = type.vxDamp;
+  st.bounceDampMod = type.bounceDamp;
+  st.splashR = type.splashR;
+  return type;
+}
+
+function resetStoneRuntime(st, { state = 'idle', targetTokens = currentChallengeTokens(), resetVelocity = true } = {}) {
+  st.state = state;
+  st.skipN = 0;
+  st.skipTimer = 0;
+  st.sinkT = 0;
+  st.deadT = 0;
+  st.flashT = 0;
+  st.skipSoundQueued = false;
+  st.skipSoundLead = AUDIO_IMPACT_LEAD;
+  st.targetTokens = copyChallengeTokens(targetTokens);
+  st.curveDir = 1;
+  if (resetVelocity) st.vx = st.vy = 0;
+}
+
 function spawnStone() {
   clearTimeout(nextStoneTimer);
   nextStoneTimer = null;
@@ -2707,36 +2778,16 @@ function spawnStone() {
   stone.x = stone.spawnX; stone.y = stone.spawnY;
   const forcedTriangle = pendingTriangleBonus > 0;
   const typeIndex = forcedTriangle ? 4 : nextStoneTypeIndex();
-  const type = STONE_TYPES[typeIndex];
-  stone.char         = type.char;
-  stone.hollow       = type.hollow;
-  stone.typeIndex     = typeIndex;
-  stone.bonusMultiplier = forcedTriangle ? pendingTriangleBonus : 0;
+  const bonusMultiplier = forcedTriangle ? pendingTriangleBonus : 0;
+  applyStoneType(stone, typeIndex, bonusMultiplier);
   pendingTriangleBonus = 0;
-  stone.powerMod      = type.power;
-  stone.vxDampMod     = type.vxDamp;
-  stone.bounceDampMod = type.bounceDamp;
-  stone.splashR       = type.splashR;
-  stone.state = 'idle';
-  stone.skipN = stone.skipTimer = stone.sinkT = stone.deadT = stone.flashT = 0;
-  stone.skipSoundQueued = false;
-  stone.targetTokens = currentChallengeTokens();
-  stone.curveDir = 1;
-  stone.vx = stone.vy = 0;
+  resetStoneRuntime(stone);
   winDrop = null;
   $winRing.textContent = '';
 }
 
 function forceCurrentStoneType(typeIndex, bonusMultiplier = 0) {
-  const type = STONE_TYPES[typeIndex] || STONE_TYPES[1];
-  stone.char = type.char;
-  stone.hollow = type.hollow;
-  stone.typeIndex = typeIndex;
-  stone.bonusMultiplier = bonusMultiplier;
-  stone.powerMod = type.power;
-  stone.vxDampMod = type.vxDamp;
-  stone.bounceDampMod = type.bounceDamp;
-  stone.splashR = type.splashR;
+  applyStoneType(stone, typeIndex, bonusMultiplier);
 }
 
 function cloneLaunchStone(source) {
@@ -2759,7 +2810,7 @@ function cloneLaunchStone(source) {
     skipN: 0,
     skipTimer: source.skipTimer,
     curveDir: source.curveDir,
-    targetTokens: source.targetTokens ? [...source.targetTokens] : currentChallengeTokens(),
+    targetTokens: source.targetTokens ? copyChallengeTokens(source.targetTokens) : currentChallengeTokens(),
     sinkT: 0,
     deadT: 0,
     flashT: 0,
@@ -3076,9 +3127,7 @@ function refreshHitChallenges(dt) {
     .map((hit, index) => hit ? index : -1)
     .filter(index => index >= 0);
   if (gameMode === GAME_MODE.tutorial) {
-    tutorialTargetFocusIndex = -1;
-    tutorialHitOnlyIndex = null;
-    tutorialTargetsMuted = false;
+    resetTutorialChallengeDisplay();
   }
   hitIndexes.forEach(index => pickTarget(index));
   if (gameMode === GAME_MODE.tutorial && (stone.state === 'dead' || stone.state === 'sinking')) {
@@ -4164,10 +4213,8 @@ function startTutorial() {
     if (pullRaf) cancelAnimationFrame(pullRaf);
     pullRaf = 0;
     targetFocusLoop = null;
-    tutorialTargetFocusIndex = -1;
-    tutorialHitOnlyIndex = null;
-    tutorialTargetsMuted = false;
-    updateChallenge();
+    resetTutorialChallengeDisplay({ update: true });
+    $shopButton.classList.remove('tut-shop-focus');
     tip.remove();
     document.querySelectorAll('#tut-score-flash').forEach(el => el.remove());
     if (gameMode === GAME_MODE.tutorial) setGameMode(GAME_MODE.playing);
@@ -4189,25 +4236,22 @@ function startTutorial() {
   }
 
   function setTutorialFocus(index) {
-    tutorialHitOnlyIndex = null;
-    tutorialTargetsMuted = false;
-    tutorialTargetFocusIndex = index;
-    updateChallenge();
+    setTutorialTargetFocus(index);
   }
 
   function endTutorial(delay) {
     wait(() => {
-      tutorialTargetFocusIndex = -1;
-      tutorialHitOnlyIndex = null;
-      tutorialTargetsMuted = false;
+      resetTutorialChallengeDisplay();
       pickTarget();
       if (stone.state === 'idle') stone.targetTokens = currentChallengeTokens();
       updateChallenge();
+      $shopButton.classList.add('tut-shop-focus');
       showTip('Collect plops\nbuy upgrades in the shop\nGood luck!');
       wait(() => {
         tip.style.transition = 'opacity .8s ease';
         tip.style.opacity = '0';
         wait(() => {
+          $shopButton.classList.remove('tut-shop-focus');
           clearTutorialArtifacts();
           if (stone.state !== 'idle') spawnStone();
           setGameMode(GAME_MODE.playing);
@@ -4234,9 +4278,7 @@ function startTutorial() {
       clearEvery(targetFocusLoop);
       targetFocusLoop = null;
     }
-    tutorialTargetFocusIndex = -1;
-    tutorialTargetsMuted = true;
-    updateChallenge();
+    setTutorialTargetsMuted(true);
     hideTip();
 
     // Use predictedSkipCountFromPull to guarantee target match
@@ -4286,10 +4328,7 @@ function startTutorial() {
           const won = challengeWon, hit = challengeHit;
           hideTip();
           if (won && hit) {
-            tutorialTargetFocusIndex = -1;
-            tutorialTargetsMuted = false;
-            tutorialHitOnlyIndex = hit.index;
-            updateChallenge();
+            setTutorialHitOnly(hit.index);
             const hitTier = CHALLENGE_TIERS.find(x => x.key === challengeTargets[hit.index]?.key);
             const r = hitTier ? hitTier.reward : 1;
             wait(() => {
