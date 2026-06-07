@@ -115,7 +115,7 @@ body { background:var(--bg); overflow:hidden; user-select:none; touch-action:non
 }
 #shop-art.shop-art-purchase {
   color: var(--shop-strong);
-  animation: shop-art-charge-shake 2.92s linear both;
+  animation: shop-art-charge-shake 3.35s linear both;
   will-change: transform;
 }
 #shop-art .purchase-cell {
@@ -444,7 +444,11 @@ body[data-theme="day"] #win-ring {
 }
 #lore-prompt.on  { opacity:1; }
 #lore-prompt span { animation:spblink 1.4s step-end infinite; }
-#challenge.tut-highlight .ch-card { animation:tutGlow .9s ease-in-out infinite; }
+.ch-card.tut-focus { animation:tutGlow 1.05s ease-in-out infinite; }
+.ch-card.tut-muted, .ch-card.tut-muted .ch-reward {
+  color:var(--challenge-label);
+  filter:none;
+}
 #tut-tip {
   position:fixed; bottom:18%; left:50%;
   transform:translateX(-50%);
@@ -1895,12 +1899,19 @@ function playLaunch(strength) {
 function playPurchaseMagic(typeIndex, level = 1) {
   if (!audio) return;
   const { ctx, dry, reverbSend } = audio;
+  const dryOut = ctx.createGain();
+  const reverbOut = ctx.createGain();
+  dryOut.gain.value = 2;
+  reverbOut.gain.value = 2;
+  dryOut.connect(dry);
+  reverbOut.connect(reverbSend);
   const stoneProfile = stoneAudioProfile(typeIndex);
   const magic = upgradeAudioProfile(typeIndex);
   const now = ctx.currentTime;
+  const audioShift = 0.24;
   const root = transposed(magic.root, magic.transpose + stoneProfile.transpose * magic.rootScale);
-  const chargeEnd = now + magic.charge;
-  const finish = now + magic.finish;
+  const chargeEnd = now + magic.charge - audioShift;
+  const finish = now + magic.finish - audioShift;
   const dropStart = chargeEnd - 0.46;
   const scale = magic.scale;
 
@@ -1912,7 +1923,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
     env.gain.setValueAtTime(0, t);
     env.gain.linearRampToValueAtTime(gain, t + 0.006);
     env.gain.exponentialRampToValueAtTime(0.001, t + tail);
-    osc.connect(env); env.connect(dry); env.connect(reverbSend);
+    osc.connect(env); env.connect(dryOut); env.connect(reverbOut);
     osc.start(t); osc.stop(t + tail + 0.04);
   }
 
@@ -1925,7 +1936,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
     env.gain.setValueAtTime(0, t);
     env.gain.linearRampToValueAtTime(gain, t + 0.010);
     env.gain.exponentialRampToValueAtTime(0.001, t + tail);
-    osc.connect(env); env.connect(dry); env.connect(reverbSend);
+    osc.connect(env); env.connect(dryOut); env.connect(reverbOut);
     osc.start(t); osc.stop(t + tail + 0.05);
   }
 
@@ -1948,7 +1959,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
     env.gain.setValueAtTime(0, t);
     env.gain.linearRampToValueAtTime(gain, t + tail * 0.85);
     env.gain.exponentialRampToValueAtTime(0.001, t + tail);
-    src.connect(flt); flt.connect(env); env.connect(reverbSend);
+    src.connect(flt); flt.connect(env); env.connect(reverbOut);
     src.start(t); src.stop(t + tail + 0.02);
   }
 
@@ -1967,7 +1978,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
       env.gain.linearRampToValueAtTime(config.gain / config.semis.length, start + attack);
       env.gain.setValueAtTime(config.gain / config.semis.length, end);
       env.gain.exponentialRampToValueAtTime(0.001, end + release);
-      osc.connect(env); env.connect(reverbSend);
+      osc.connect(env); env.connect(reverbOut);
       osc.start(start); osc.stop(end + release + 0.05);
     });
   }
@@ -2016,7 +2027,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
     boomEnv.gain.setValueAtTime(0, chargeEnd - 0.05);
     boomEnv.gain.linearRampToValueAtTime(0.12, chargeEnd + 0.02);
     boomEnv.gain.exponentialRampToValueAtTime(0.001, chargeEnd + 0.22);
-    boom.connect(boomEnv); boomEnv.connect(dry); boomEnv.connect(reverbSend);
+    boom.connect(boomEnv); boomEnv.connect(dryOut); boomEnv.connect(reverbOut);
     boom.start(chargeEnd - 0.05); boom.stop(chargeEnd + 0.26);
   }
 
@@ -2041,7 +2052,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
   noiseEnv.gain.linearRampToValueAtTime(magic.noise.gain, dropStart - 0.10);
   noiseEnv.gain.exponentialRampToValueAtTime(0.001, dropStart);
   noiseEnv.gain.exponentialRampToValueAtTime(0.001, finish);
-  src.connect(flt); flt.connect(noiseEnv); noiseEnv.connect(reverbSend);
+  src.connect(flt); flt.connect(noiseEnv); noiseEnv.connect(reverbOut);
   src.start(now); src.stop(finish);
 
   // Flash chime: главный яркий чайм на вспышку
@@ -2052,7 +2063,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
     osc.frequency.exponentialRampToValueAtTime(freq * 0.93, chargeEnd + 0.32);
     env.gain.setValueAtTime(0.22, chargeEnd);
     env.gain.exponentialRampToValueAtTime(0.001, chargeEnd + 0.32);
-    osc.connect(env); env.connect(dry); env.connect(reverbSend);
+    osc.connect(env); env.connect(dryOut); env.connect(reverbOut);
     osc.start(chargeEnd); osc.stop(chargeEnd + 0.34);
   }
 
@@ -2073,7 +2084,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
     fo.frequency.exponentialRampToValueAtTime(Math.max(20, freq * (0.72 + Math.random() * 0.22)), ft + dur);
     fe.gain.setValueAtTime(fg, ft);
     fe.gain.exponentialRampToValueAtTime(0.001, ft + dur);
-    fo.connect(fe); fe.connect(dry); fe.connect(reverbSend);
+    fo.connect(fe); fe.connect(dryOut); fe.connect(reverbOut);
     fo.start(ft); fo.stop(ft + dur + 0.01);
   }
 
@@ -2089,7 +2100,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
     fo.frequency.exponentialRampToValueAtTime(Math.max(20, freq * 0.88), ft + dur);
     fe.gain.setValueAtTime(0.06 + Math.random() * 0.04, ft);
     fe.gain.exponentialRampToValueAtTime(0.001, ft + dur);
-    fo.connect(fe); fe.connect(dry); fe.connect(reverbSend);
+    fo.connect(fe); fe.connect(dryOut); fe.connect(reverbOut);
     fo.start(ft); fo.stop(ft + dur + 0.01);
   });
 
@@ -2105,7 +2116,7 @@ function playPurchaseMagic(typeIndex, level = 1) {
     fo.frequency.exponentialRampToValueAtTime(freq * (0.92 + Math.random() * 0.05), ft + tail);
     fe.gain.setValueAtTime(fg, ft);
     fe.gain.exponentialRampToValueAtTime(0.001, ft + tail);
-    fo.connect(fe); fe.connect(dry); fe.connect(reverbSend);
+    fo.connect(fe); fe.connect(dryOut); fe.connect(reverbOut);
     fo.start(ft); fo.stop(ft + tail + 0.01);
   });
 }
@@ -2138,7 +2149,7 @@ function updateWaveAudio() {
 // ── wave constants ───────────────────────────────────────────────────
 const SPEED = 9, WAVELENGTH = 7.5, DECAY_T = 0.22, DECAY_D = 0.045;
 const CREST_T = 0.80, FADE_LOW = 0.08, FADE_ZERO = 0.004;
-const AUDIO_IMPACT_LEAD = 0.028;
+const AUDIO_IMPACT_LEAD = 0.34;
 
 // ── game constants ────────────────────────────────────────────────────
 const POWER = 4.2, VX_DAMP = 0.92;
@@ -2223,9 +2234,19 @@ function updateChallenge() {
     .sort((a, b) => b.skipN - a.skipN)[0];
   const displayStone = leadStone || stone;
   const board = challengeTargets.map((item, index) => {
-    const hit = challengeHits[index] ? ' hit' : '';
+    const classes = ['ch-card'];
+    if (challengeHits[index]) classes.push('hit');
+    if (gameMode === GAME_MODE.tutorial && tutorialHitOnlyIndex !== null && index !== tutorialHitOnlyIndex) {
+      classes.push('tut-muted');
+    } else if (gameMode === GAME_MODE.tutorial && tutorialHitOnlyIndex === null) {
+      if (tutorialTargetFocusIndex >= 0) {
+        classes.push(tutorialTargetFocusIndex === index ? 'tut-focus' : 'tut-muted');
+      } else if (tutorialTargetsMuted) {
+        classes.push('tut-muted');
+      }
+    }
     const reward = typeof stone !== 'undefined' ? adjustedReward(item.reward, displayStone) : item.reward;
-    return `<span class="ch-card${hit}">[ ${item.value} ]<span class="ch-reward">+${reward}</span></span>`;
+    return `<span class="${classes.join(' ')}">[ ${item.value} ]<span class="ch-reward">+${reward}</span></span>`;
   }).join('');
   if (challengeWon && !leadStone) {
     $challenge.innerHTML =
@@ -2500,6 +2521,9 @@ let shopIndex   = 0;
 const shopLevels = Array(SHOP_STONES.length).fill(0);
 let pendingTriangleBonus = 0;
 let tutorialActive = false;
+let tutorialTargetFocusIndex = -1;
+let tutorialHitOnlyIndex = null;
+let tutorialTargetsMuted = false;
 
 const GAME_MODE = {
   splash: 'splash',
@@ -2631,6 +2655,11 @@ function awardChallenge(match, drop, st = stone) {
     const level = upgradeLevel(4);
     if (level > 0) pendingTriangleBonus = level + 1;
   }
+  if (gameMode === GAME_MODE.tutorial) {
+    tutorialTargetFocusIndex = -1;
+    tutorialTargetsMuted = false;
+    tutorialHitOnlyIndex = match.index;
+  }
   playWin();
   updateScore();
   updateChallenge();
@@ -2698,6 +2727,18 @@ function spawnStone() {
   $winRing.textContent = '';
 }
 
+function forceCurrentStoneType(typeIndex, bonusMultiplier = 0) {
+  const type = STONE_TYPES[typeIndex] || STONE_TYPES[1];
+  stone.char = type.char;
+  stone.hollow = type.hollow;
+  stone.typeIndex = typeIndex;
+  stone.bonusMultiplier = bonusMultiplier;
+  stone.powerMod = type.power;
+  stone.vxDampMod = type.vxDamp;
+  stone.bounceDampMod = type.bounceDamp;
+  stone.splashR = type.splashR;
+}
+
 function cloneLaunchStone(source) {
   return {
     state: 'flying',
@@ -2723,6 +2764,7 @@ function cloneLaunchStone(source) {
     deadT: 0,
     flashT: 0,
     skipSoundQueued: false,
+    skipSoundLead: source.skipSoundLead ?? AUDIO_IMPACT_LEAD,
   };
 }
 
@@ -2744,6 +2786,19 @@ function scheduleNextStone() {
   }, NEXT_STONE_DELAY_MS);
 }
 
+function armSkipSound(st) {
+  st.skipSoundQueued = false;
+  st.skipSoundLead = Math.min(AUDIO_IMPACT_LEAD, Math.max(0.045, st.skipTimer * 0.96));
+}
+
+function playQueuedSkipSound(st) {
+  if (!audio || audio.ctx.state !== 'running' || st.skipSoundQueued) return;
+  const impactSkipN = st.skipN;
+  const strength = Math.max(0.35, 1 - (impactSkipN + 1) * 0.06);
+  playSkip(strength, impactSkipN, stoneAudioProfile(st.typeIndex));
+  st.skipSoundQueued = true;
+}
+
 function launchCurrentStone({ respawnAfterRelease = false } = {}) {
   const dx = stone.spawnX - stone.x, dy = stone.spawnY - stone.y;
   const spd = pullPixels(dx, dy);
@@ -2758,11 +2813,14 @@ function launchCurrentStone({ respawnAfterRelease = false } = {}) {
   stone.x = stone.spawnX;
   stone.y = stone.spawnY;
   stone.skipTimer = Math.max(0.07, 0.007 * Math.sqrt(stone.vx * stone.vx + stone.vy * stone.vy));
+  armSkipSound(stone);
   stone.curveDir = Math.random() < 0.5 ? 1 : -1;
   const profile = stoneAudioProfile(stone.typeIndex);
   playLaunch(Math.min(1, spd / maxPullPixels()), profile);
   if (respawnAfterRelease) {
-    activeStones.push(cloneLaunchStone(stone));
+    const launchedStone = cloneLaunchStone(stone);
+    armSkipSound(launchedStone);
+    activeStones.push(launchedStone);
     trimActiveStones();
     stone.state = 'cooldown';
     stone.x = stone.spawnX;
@@ -2913,11 +2971,8 @@ function updateActiveStone(st, dt) {
     bounceStoneOffEdges(st);
     checkFishBonusHit(st);
 
-    if (!st.skipSoundQueued && st.skipTimer <= AUDIO_IMPACT_LEAD) {
-      const impactSkipN = st.skipN;
-      const strength = Math.max(0.35, 1 - (impactSkipN + 1) * 0.06);
-      playSkip(strength, impactSkipN, stoneAudioProfile(st.typeIndex));
-      st.skipSoundQueued = true;
+    if (!st.skipSoundQueued && st.skipTimer <= (st.skipSoundLead ?? AUDIO_IMPACT_LEAD)) {
+      playQueuedSkipSound(st);
     }
 
     if (st.skipTimer <= 0) {
@@ -2949,7 +3004,7 @@ function updateActiveStone(st, dt) {
         st.vy = (ndy / spd) * spdNext;
         st.skipN++;
         st.skipTimer = Math.max(0.07, 0.007 * spdNext);
-        st.skipSoundQueued = false;
+        armSkipSound(st);
         st.flashT    = 0.12;
         const str = Math.max(0.35, 1 - st.skipN * 0.06);
         emitSkipImpact({
@@ -2988,6 +3043,7 @@ function updateActiveStone(st, dt) {
           const boost = (MIN_SPD * 0.98 / effVxDamp) / spdNext;
           st.vx *= boost; st.vy *= boost;
           st.skipTimer = Math.max(0.07, 0.007 * MIN_SPD * 0.98 / effVxDamp);
+          armSkipSound(st);
         } else if (spdNext < MIN_SPD) {
           st.vx = st.vy = 0;
           st.state = 'sinking';
@@ -3014,11 +3070,16 @@ function updateActiveStone(st, dt) {
 function refreshHitChallenges(dt) {
   if (!challengeWon || challengeWonT === null) return;
   challengeWonT += dt;
-  const resolveDelay = gameMode === GAME_MODE.tutorial ? 2.0 : 1.25;
+  const resolveDelay = gameMode === GAME_MODE.tutorial ? 2.6 : 1.25;
   if (challengeWonT <= resolveDelay) return;
   const hitIndexes = challengeHits
     .map((hit, index) => hit ? index : -1)
     .filter(index => index >= 0);
+  if (gameMode === GAME_MODE.tutorial) {
+    tutorialTargetFocusIndex = -1;
+    tutorialHitOnlyIndex = null;
+    tutorialTargetsMuted = false;
+  }
   hitIndexes.forEach(index => pickTarget(index));
   if (gameMode === GAME_MODE.tutorial && (stone.state === 'dead' || stone.state === 'sinking')) {
     spawnStone();
@@ -3050,7 +3111,7 @@ function purchaseChargeDelay(row, col, rows, cols) {
   const wobble = Math.sin(col * 1.7 + row * 0.8) * 120
     + Math.cos(col * 0.53 - row * 1.35) * 95
     + ((row * 37 + col * 19) % 11 - 5) * 18;
-  return Math.max(60, Math.min(2020, 130 + y * 1760 + wobble * 1.08 + Math.sin(x * Math.PI * 2) * 70));
+  return Math.max(60, Math.min(2320, 150 + y * 2020 + wobble * 1.18 + Math.sin(x * Math.PI * 2) * 80));
 }
 
 function buildPurchaseCells(text) {
@@ -3114,12 +3175,12 @@ function spawnPurchaseEffect() {
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
     cells.forEach(cell => cell.classList.add('charge-green'));
-  }, 2000));
+  }, 2300));
 
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
     $shopArt.classList.add('shop-art-glow', 'shop-art-burst');
-  }, 2260));
+  }, 2600));
 
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
@@ -3141,18 +3202,18 @@ function spawnPurchaseEffect() {
         sparkChars[(i + Math.floor(Math.random() * sparkChars.length)) % sparkChars.length]
       );
     }
-  }, 2300));
+  }, 2640));
 
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
     $shopArt.classList.add('shop-art-resolve');
-  }, 2550));
+  }, 2940));
   timers.push(setTimeout(() => {
     if ($shopArt._purchaseToken !== token) return;
     $shopArt.classList.remove('shop-art-purchase', 'shop-art-glow', 'shop-art-burst', 'shop-art-resolve');
     $shopArt.textContent = originalText;
     $shopArt._purchaseTimers = [];
-  }, 2920));
+  }, 3360));
 }
 
 function spawnPlopPopup(fx, fy) {
@@ -4066,10 +4127,13 @@ function showLoreScreen() {
 function startTutorial() {
   clearTutorialArtifacts();
   setGameMode(GAME_MODE.tutorial);
+  if (stone.state !== 'idle') spawnStone();
+  forceCurrentStoneType(1);
   const $ch = document.getElementById('challenge');
   const timers = new Set();
   const intervals = new Set();
   let pullRaf = 0;
+  let targetFocusLoop = null;
   const wait = (fn, delay) => {
     const id = setTimeout(() => {
       timers.delete(id);
@@ -4099,7 +4163,11 @@ function startTutorial() {
     intervals.clear();
     if (pullRaf) cancelAnimationFrame(pullRaf);
     pullRaf = 0;
-    $ch.classList.remove('tut-highlight');
+    targetFocusLoop = null;
+    tutorialTargetFocusIndex = -1;
+    tutorialHitOnlyIndex = null;
+    tutorialTargetsMuted = false;
+    updateChallenge();
     tip.remove();
     document.querySelectorAll('#tut-score-flash').forEach(el => el.remove());
     if (gameMode === GAME_MODE.tutorial) setGameMode(GAME_MODE.playing);
@@ -4115,14 +4183,26 @@ function startTutorial() {
     const f = document.createElement('div');
     f.id = 'tut-score-flash';
     f.textContent = text;
-    f.style.animation = 'tutScoreFlash 1.5s ease forwards';
+    f.style.animation = 'tutScoreFlash 2.1s ease forwards';
     document.body.appendChild(f);
-    wait(() => f.remove(), 1600);
+    wait(() => f.remove(), 2200);
+  }
+
+  function setTutorialFocus(index) {
+    tutorialHitOnlyIndex = null;
+    tutorialTargetsMuted = false;
+    tutorialTargetFocusIndex = index;
+    updateChallenge();
   }
 
   function endTutorial(delay) {
     wait(() => {
-      $ch.classList.remove('tut-highlight');
+      tutorialTargetFocusIndex = -1;
+      tutorialHitOnlyIndex = null;
+      tutorialTargetsMuted = false;
+      pickTarget();
+      if (stone.state === 'idle') stone.targetTokens = currentChallengeTokens();
+      updateChallenge();
       showTip('Collect plops\nbuy upgrades in the shop\nGood luck!');
       wait(() => {
         tip.style.transition = 'opacity .8s ease';
@@ -4133,22 +4213,34 @@ function startTutorial() {
           setGameMode(GAME_MODE.playing);
           $hint.style.opacity = '1';
         }, 900);
-      }, 3500);
+      }, 5000);
     }, delay);
   }
 
   // Step 1: highlight challenge targets + explain
   wait(() => {
-    $ch.classList.add('tut-highlight');
+    let focusIndex = 0;
+    setTutorialFocus(focusIndex);
+    targetFocusLoop = every(() => {
+      focusIndex = (focusIndex + 1) % challengeTargets.length;
+      setTutorialFocus(focusIndex);
+    }, 1150);
     showTip('Hit any of these numbers\nwith your stone');
-  }, 800);
+  }, 1200);
 
   // Step 2: scripted demo throw — guaranteed win
   wait(() => {
+    if (targetFocusLoop) {
+      clearEvery(targetFocusLoop);
+      targetFocusLoop = null;
+    }
+    tutorialTargetFocusIndex = -1;
+    tutorialTargetsMuted = true;
+    updateChallenge();
     hideTip();
 
     // Use predictedSkipCountFromPull to guarantee target match
-    const PULL_DIST = 6;
+    const PULL_DIST = 8;
     const N = predictedSkipCountFromPull(PULL_DIST);
     const tierIdx = CHALLENGE_TIERS.findIndex(t => N >= t.min && N <= t.max);
     const tIdx = tierIdx >= 0 ? tierIdx : (N < CHALLENGE_TIERS[0].min ? 0 : 2);
@@ -4161,7 +4253,7 @@ function startTutorial() {
     $hint.style.opacity = '0';
     const spX = stone.spawnX, spY = stone.spawnY;
     const pullTargetX = spX - PULL_DIST;
-    const PULL_DUR = 1100;
+    const PULL_DUR = 1500;
     const pullStart = performance.now();
 
     function animatePull(ts) {
@@ -4170,7 +4262,7 @@ function startTutorial() {
       stone.x = spX + (pullTargetX - spX) * ease;
       stone.y = spY;
       if (t < 1) { pullRaf = requestAnimationFrame(animatePull); }
-      else { wait(launch, 450); }
+      else { wait(launch, 700); }
     }
 
     function launch() {
@@ -4180,6 +4272,7 @@ function startTutorial() {
       stone.state = 'flying';
       stone.targetTokens = currentChallengeTokens();
       stone.skipTimer = Math.max(0.07, 0.007 * stone.vx);
+      armSkipSound(stone);
       stone.curveDir = 0;
       playLaunch(0.7, stoneAudioProfile());
 
@@ -4193,14 +4286,18 @@ function startTutorial() {
           const won = challengeWon, hit = challengeHit;
           hideTip();
           if (won && hit) {
+            tutorialTargetFocusIndex = -1;
+            tutorialTargetsMuted = false;
+            tutorialHitOnlyIndex = hit.index;
+            updateChallenge();
             const hitTier = CHALLENGE_TIERS.find(x => x.key === challengeTargets[hit.index]?.key);
             const r = hitTier ? hitTier.reward : 1;
             wait(() => {
               showScoreFlash(`+${r} plop${r !== 1 ? 's' : ''}!`);
-              endTutorial(1700);
-            }, 350);
+              endTutorial(2300);
+            }, 650);
           } else {
-            endTutorial(400);
+            endTutorial(900);
           }
         }
       }, 80);
@@ -4208,7 +4305,7 @@ function startTutorial() {
 
     showTip('watch how to throw...');
     pullRaf = requestAnimationFrame(animatePull);
-  }, 3800);
+  }, 6200);
 }
 
 // ── Splash ────────────────────────────────────────────────────────────
@@ -4633,6 +4730,7 @@ document.addEventListener('DOMContentLoaded', function() {
       skipTimer: 0.16,
       skipN: 0,
       skipSoundQueued: false,
+      skipSoundLead: Math.min(AUDIO_IMPACT_LEAD, 0.16 * 0.96),
       skipSpacing: 2.6,
       visibleUntil: 99,
       };
@@ -4673,7 +4771,7 @@ document.addEventListener('DOMContentLoaded', function() {
       st.x += st.vx * dt;
       st.y += st.vy * dt;
       st.skipTimer -= dt;
-      if (!st.skipSoundQueued && st.skipTimer <= AUDIO_IMPACT_LEAD) {
+      if (!st.skipSoundQueued && st.skipTimer <= (st.skipSoundLead ?? AUDIO_IMPACT_LEAD)) {
         playSkip(Math.max(0.28, 0.92 - st.skipN * 0.07), st.skipN, STONE_AUDIO_FALLBACKS[1]);
         st.skipSoundQueued = true;
       }
@@ -4686,6 +4784,7 @@ document.addEventListener('DOMContentLoaded', function() {
         st.skipSpacing = Math.min(3.8, Math.max(1.9, st.skipSpacing * 1.08));
         st.skipTimer = Math.max(0.07, 0.007 * spdNext * st.skipSpacing);
         st.skipSoundQueued = false;
+        st.skipSoundLead = Math.min(AUDIO_IMPACT_LEAD, Math.max(0.045, st.skipTimer * 0.96));
         addSplashDrop(st.x, st.y, simT, st.skipN);
         st.skipN++;
       }
